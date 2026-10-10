@@ -1,0 +1,46 @@
+#!/bin/sh
+# Stand-in for the Claude Code CLI used by automated tests. It never contacts
+# any service. Behavior:
+#   claude --version         prints a version
+#   claude auth status ...   reports sign-in state for $CLAUDE_CONFIG_DIR
+#   claude                   records the environment it received; with
+#                            PS_FAKE_CLAUDE_HOLD=1 it then simulates an
+#                            interactive session: it "signs in" by writing an
+#                            account file into ITS OWN configuration
+#                            directory and keeps running until a stop file
+#                            appears there (or about five minutes pass).
+config_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+account_file="$config_dir/.fake-account.json"
+
+case "$1" in
+  --version)
+    echo "2.1.0 (Claude Code)"
+    exit 0
+    ;;
+  auth)
+    if [ -f "$account_file" ]; then
+      email=$(sed -n 's/.*"email":"\([^"]*\)".*/\1/p' "$account_file")
+      printf '{"loggedIn":true,"authMethod":"claude.ai","email":"%s","apiProvider":"firstParty","configDirectory":"%s"}\n' "$email" "$config_dir"
+    else
+      printf '{"loggedIn":false,"authMethod":"none","apiProvider":"firstParty","configDirectory":"%s"}\n' "$config_dir"
+    fi
+    exit 0
+    ;;
+esac
+
+if [ -n "$PS_E2E_RECORD_FILE" ]; then
+  if [ -n "$ANTHROPIC_API_KEY" ]; then api_key=true; else api_key=false; fi
+  printf '{"pid":%s,"configDir":"%s","apiKeyPresent":%s,"cwd":"%s"}\n' "$$" "${CLAUDE_CONFIG_DIR:-}" "$api_key" "$(pwd)" >> "$PS_E2E_RECORD_FILE"
+fi
+
+if [ -n "$PS_FAKE_CLAUDE_HOLD" ] && [ -n "$CLAUDE_CONFIG_DIR" ]; then
+  # Simulated sign-in: the account name is the profile folder's name prefix.
+  name=$(basename "$CLAUDE_CONFIG_DIR" | cut -d- -f1)
+  printf '{"email":"%s@example.test"}\n' "$name" > "$account_file"
+  i=0
+  while [ "$i" -lt 1200 ] && [ ! -e "$config_dir/.fake-stop" ]; do
+    sleep 0.25
+    i=$((i + 1))
+  done
+fi
+exit 0

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stand-in terminal emulator for end-to-end tests. Like a real
+# x-terminal-emulator it runs the command given after -e, but without a window.
+if [ "$1" = "-e" ]; then shift; fi
+"$@" &
+exit 0
