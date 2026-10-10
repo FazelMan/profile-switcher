@@ -59,50 +59,64 @@ Terminal-specific checks:
   "Launched — running state not tracked" (expected; see
   `docs/compatibility.md`).
 
-## 2. Claude Desktop — current behavior (macOS, Windows)
+## 2. Claude Desktop — default (shared) profile (macOS, Windows)
 
-Profile Switcher reports Claude Desktop isolation and concurrent instances as
-**Unsupported**. These steps confirm that it never implies otherwise.
+With **Settings → Experimental → Separate Claude Desktop profiles** off (the
+default), Claude Desktop is opened only with its normal, shared data.
 
 | #   | Step                                                                       | Expected result                                                                                                                                    |
 | --- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2.1 | Create a Claude Desktop profile.                                           | Only "The application's default configuration" is offered. Card shows **Unsupported**; primary action reads **Open (shared)**.                     |
-| 2.2 | Open Details.                                                              | Limitations state that separate data folders and concurrent accounts are not supported and that opening uses the shared sign-in. No Verify button. |
+| 2.2 | Open Details.                                                              | Limitations state that separate data folders are not documented and that opening uses the shared sign-in. No Verify button.                        |
 | 2.3 | Click **Open (shared)** with Claude Desktop closed, then again while open. | Claude Desktop opens normally; the second click brings the existing window forward. No second account, no data folder created by Profile Switcher. |
 | 2.4 | On Linux, open the New profile form.                                       | Claude Desktop is shown as "Not available on this OS" and cannot be selected.                                                                      |
 
-## 3. Claude Desktop — isolation research protocol (not a product feature)
+## 3. Claude Desktop — experimental separate profiles
 
-This section gathers evidence about whether Claude Desktop could ever be
-isolated safely. **Profile Switcher does not implement it.** Run these steps
-manually, outside Profile Switcher, on a machine and accounts you can afford
-to reset, and record the results. A future adapter change requires positive
-results on every supported OS **and** vendor documentation or confirmation
-that the mechanism is supported.
+Profile Switcher can start Claude Desktop with Chromium's
+`--user-data-dir=<profile folder>` option. Anthropic does not document or
+support it, so the app labels these profiles **Experimental** and **Needs
+verification**. This section is how you (and this project) gather evidence.
+Use accounts you can afford to sign out of; keep a note of which account
+belongs to which profile.
 
-1. Quit Claude Desktop completely. Back up nothing that contains credentials;
-   use throwaway test accounts.
-2. Create two empty folders, `A` and `B`.
-3. Start instance A with Chromium's user-data flag:
-   - macOS: `open -n -a Claude --args --user-data-dir="$HOME/claude-test/A"`
-   - Windows: `"%LOCALAPPDATA%\AnthropicClaude\claude.exe" --user-data-dir="%USERPROFILE%\claude-test\A"`
-4. Sign in with Account P. Then start instance B the same way with folder `B`
-   and sign in with Account W.
-5. Record for each OS and Claude Desktop version:
-   - Does the second instance start at all, or does it focus the first one?
-   - Does the browser sign-in callback (`claude://`) return to the instance
-     that started it, or to the other one?
-   - After both are signed in, does each window show its own account? Do
-     conversations, projects, and MCP configuration stay separate?
-   - Does quitting one instance affect the other?
-   - After an auto-update, do both folders still work?
-   - Does the default profile (`~/Library/Application Support/Claude` or
-     `%APPDATA%\Claude`) change during the test?
-6. Record whether any official Anthropic documentation describes this
-   behavior as supported.
+| #    | Step                                                                                                              | Expected result / what to record                                                                                                                                                                                              |
+| ---- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1  | Settings → Experimental: read the warning, tick **Turn on (I understand the risks above)**.                       | The setting is saved. Settings → Running several profiles now also lists Claude Desktop.                                                                                                                                      |
+| 3.2  | Create Claude Desktop profiles **Desktop P** and **Desktop W** with "Folder managed by Profile Switcher".         | Form shows the experimental warning. Cards show **Experimental** and **Needs verification**; Details lists every limitation (undocumented option, `claude://` sign-in, …).                                                    |
+| 3.3  | Quit Claude Desktop completely. Launch **Desktop P**.                                                             | A Claude Desktop window opens on the sign-in screen (empty folder). The card shows **Running · folder confirmed** within a few seconds.                                                                                       |
+| 3.4  | Sign in to Account P in that window. Close no other window.                                                       | Record: did the browser sign-in return to this window? (If a different instance received it, note it.)                                                                                                                        |
+| 3.5  | Launch **Desktop W** while P is running (Concurrent mode). Sign in to Account W.                                  | Record: does a second, separate window open (not focus P)? Does the sign-in finish in W's window?                                                                                                                             |
+| 3.6  | Check both windows.                                                                                               | Record: each shows its own account; conversations, projects, and MCP servers are separate.                                                                                                                                    |
+| 3.7  | Quit P (from its own window or Dock/tray). Then reopen P from Profile Switcher.                                   | W keeps running and signed in. P reopens still signed in to Account P.                                                                                                                                                        |
+| 3.8  | Open Claude Desktop the normal way (not through Profile Switcher) or use the default profile's **Open (shared)**. | Record: your normal account and data appear, unchanged by the test.                                                                                                                                                           |
+| 3.9  | Settings → Claude Desktop → **Switch**. With P running, launch W.                                                 | A dialog lists P with its PID. **Cancel** changes nothing. **Close and open** quits P normally (it may ask to save) and then opens W. On Windows, if P stays in the tray, the error says P did not close and W is not opened. |
+| 3.10 | In Details of each profile, click **I checked this profile** only if 3.4–3.8 all passed.                          | The card shows **Supported** with the isolation still labeled experimental, and the summary says the check was yours.                                                                                                         |
+| 3.11 | After the next Claude Desktop update, open Details.                                                               | The profile shows **Needs verification** again ("Claude Desktop has changed since you checked"). Repeat 3.3–3.8.                                                                                                              |
+| 3.12 | Turn the experimental setting off.                                                                                | Desktop P/W show as unavailable and cannot be launched; they are never opened with the shared account. Their folders stay on disk.                                                                                            |
 
-Until every answer is positive and documented, the Claude Desktop adapter
-stays at **Unsupported**.
+Record the Claude Desktop version and OS for every run in §4. Positive results
+on real devices are what this project needs before it can describe the
+behavior with more confidence in [compatibility.md](compatibility.md); the
+feature stays experimental as long as Anthropic does not document it.
+
+## 3a. Switch mode with Claude Code (every OS)
+
+| #    | Step                                                                | Expected result                                                                                                                               |
+| ---- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3a.1 | Settings → Running several profiles → Claude Code → **Switch**.     | Saved.                                                                                                                                        |
+| 3a.2 | Launch Personal and wait for **Running**. Launch Work.              | A dialog lists Personal with its PID. Personal is still running.                                                                              |
+| 3a.3 | Choose **Open alongside**.                                          | Work starts; Personal keeps running.                                                                                                          |
+| 3a.4 | Close Work. Launch Work again and choose **Close and open "Work"**. | macOS/Linux: Personal's Claude Code exits (its terminal shows the process ended), then Work starts. Personal's sign-in is kept for next time. |
+| 3a.5 | Windows only: repeat 3a.4.                                          | Windows cannot ask a console program to quit: the error says Personal did not close, and Work is not opened. Close it yourself.               |
+
+## 3b. Persian interface
+
+| #    | Step                                                                             | Expected result                                                                                    |
+| ---- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 3b.1 | Settings → Language → **فارسی**.                                                 | The whole window switches to Persian and mirrors right to left; the menu bar labels change too.    |
+| 3b.2 | Look at paths, commands, PIDs, and versions in Details.                          | Paths and commands read left to right; numbers use Persian digits; dates use the Persian calendar. |
+| 3b.3 | Start Profile Switcher for the first time on a system whose language is Persian. | It starts in Persian.                                                                              |
 
 ## 4. Results record
 

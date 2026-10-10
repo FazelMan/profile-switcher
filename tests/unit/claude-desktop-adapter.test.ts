@@ -4,6 +4,8 @@ import { ClaudeDesktopAdapter } from '../../src/main/adapters/claude-desktop';
 import { createDefaultRegistry } from '../../src/main/adapters/registry';
 import { fakeFiles, fakeSystem } from '../helpers/fake-system';
 
+const NO_EXPERIMENTS = { claudeDesktopIsolation: false };
+
 const adapter = new ClaudeDesktopAdapter();
 
 const profile: Profile = {
@@ -17,6 +19,7 @@ const profile: Profile = {
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   lastLaunch: null,
+  manualCheck: null,
 };
 
 describe('ClaudeDesktopAdapter', () => {
@@ -41,6 +44,7 @@ describe('ClaudeDesktopAdapter', () => {
       },
       detection,
       system,
+      experimental: NO_EXPERIMENTS,
     });
     expect(report.state).toBe('Unsupported');
     expect(report.launch.available).toBe(false);
@@ -83,6 +87,7 @@ describe('ClaudeDesktopAdapter', () => {
       },
       detection,
       system,
+      experimental: NO_EXPERIMENTS,
     });
     expect(report.state).toBe('Unsupported');
     expect(report.launch).toEqual({ available: true, isolation: 'shared' });
@@ -103,10 +108,13 @@ describe('ClaudeDesktopAdapter', () => {
         checkedAt: '',
       },
       system: fakeSystem({ platform: 'darwin' }),
+      experimental: NO_EXPERIMENTS,
     });
     expect(plan).toEqual({
       type: 'desktop',
       target: '/Applications/Claude.app',
+      args: [],
+      marker: null,
       isolation: 'shared',
     });
     expect(JSON.stringify(plan)).not.toContain('user-data-dir');

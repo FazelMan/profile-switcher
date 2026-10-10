@@ -1,9 +1,11 @@
 import { vi } from 'vitest';
 import type { AppSummary, CompatibilityReport } from '../../src/shared/domain/compatibility';
 import type { Result } from '../../src/shared/domain/errors';
-import { DEFAULT_SETTINGS } from '../../src/shared/domain/settings';
+import { DEFAULT_SETTINGS, type SettingsPatch } from '../../src/shared/domain/settings';
 import type {
   DirectoryChoice,
+  LaunchRequest,
+  LaunchResult,
   ProfileSwitcherApi,
   ProfileView,
   RuntimeSnapshot,
@@ -23,6 +25,7 @@ export const claudeCodeApp: AppSummary = {
   supportsVerification: true,
   supportsCopyCommand: true,
   copyCommandShells: ['posix', 'fish'],
+  experimental: null,
   detection: {
     status: 'found',
     executablePath: '/usr/bin/claude',
@@ -45,6 +48,12 @@ export const claudeDesktopApp: AppSummary = {
   supportsVerification: false,
   supportsCopyCommand: false,
   copyCommandShells: [],
+  experimental: {
+    feature: 'claudeDesktopIsolation',
+    enabled: false,
+    storageKinds: ['managed', 'custom'],
+    mechanism: { code: 'mechanism.claudeDesktop.experimental' },
+  },
   detection: {
     status: 'found',
     executablePath: '/Applications/Claude.app',
@@ -84,6 +93,7 @@ export function makeProfile(overrides: Partial<ProfileView> = {}): ProfileView {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     lastLaunch: null,
+    manualCheck: null,
     dataDirectory: '/data/profiles/claude-code/work-abc234',
     compatibility: isolatedReport,
     ...overrides,
@@ -151,18 +161,38 @@ export function createFakeApi(
       snapshot = { ...snapshot, profiles: snapshot.profiles.filter((p) => p.id !== id) };
       return ok({ snapshot, retainedDirectory: removed?.dataDirectory ?? null });
     }),
-    launchProfile: vi.fn(() =>
+    launchProfile: vi.fn((_id: string, _request: LaunchRequest): Promise<Result<LaunchResult>> =>
       ok({
+        kind: 'launched',
         snapshot,
         report: {
-          method: 'terminal' as const,
-          isolation: 'isolated' as const,
+          launchId: 'abcdef123456',
+          closedProfileIds: [],
+          tracking: 'pid-file',
+          method: 'terminal',
+          isolation: 'isolated',
           terminal: 'XTerm',
           pid: 1,
           notes: [],
         },
       }),
     ),
+    setManualCheck: vi.fn((id: string, checked: boolean) => {
+      snapshot = {
+        ...snapshot,
+        profiles: snapshot.profiles.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                manualCheck: checked
+                  ? { at: new Date().toISOString(), appVersion: '0.14.10' }
+                  : null,
+              }
+            : p,
+        ),
+      };
+      return ok(snapshot);
+    }),
     verifyProfile: vi.fn(() =>
       ok({
         verifiedAt: new Date().toISOString(),
@@ -178,7 +208,17 @@ export function createFakeApi(
     ),
     openProfileDirectory: vi.fn(() => ok(null)),
     copyLaunchCommand: vi.fn(() => ok({ command: 'env claude' })),
-    updateSettings: vi.fn(() => ok(snapshot)),
+    updateSettings: vi.fn((patch: SettingsPatch) => {
+      snapshot = {
+        ...snapshot,
+        settings: {
+          ...snapshot.settings,
+          ...patch,
+          launchModes: { ...snapshot.settings.launchModes, ...patch.launchModes },
+        },
+      };
+      return ok(snapshot);
+    }),
     chooseDirectory: vi.fn((): Promise<Result<DirectoryChoice | null>> => ok(null)),
     getDiagnostics: vi.fn(() =>
       ok({

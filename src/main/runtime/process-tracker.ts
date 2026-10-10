@@ -6,7 +6,7 @@ import type { InstanceStatus, ProcessTracking, RuntimeSnapshot } from '@shared/i
 import type { Logger } from '../diagnostics/logger';
 import { pathApiFor, samePath } from '../platform';
 import { writeFileAtomic } from '../storage/atomic-write';
-import type { SystemContext } from '../system';
+import { commandLineEndsWithArgument, type SystemContext } from '../system';
 
 /** How long a launch may take to report its PID before it is shown as unconfirmed. */
 const STARTUP_GRACE_MS = 20_000;
@@ -20,9 +20,11 @@ const recordSchema = z
     launchId: z.string().regex(LAUNCH_ID_PATTERN),
     profileId: profileIdSchema,
     startedAt: z.iso.datetime(),
-    tracking: z.enum(['pid-file', 'child', 'none']),
+    tracking: z.enum(['pid-file', 'child', 'marker', 'none']),
     pid: z.number().int().positive().nullable(),
     executable: z.string().min(1).max(4096),
+    /** Final argument identifying the main process (`marker` tracking). Absent in 0.1.x records. */
+    marker: z.string().min(1).max(5000).nullable().default(null),
     /** Variables the launch set (e.g. CLAUDE_CONFIG_DIR). Paths only, never credentials. */
     expectedEnv: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(4096)),
   })
@@ -42,7 +44,14 @@ export interface RegisterLaunch {
   tracking: ProcessTracking;
   pid: number | null;
   executable: string;
+  marker: string | null;
   expectedEnv: Record<string, string>;
+}
+
+/** A launch's current status together with the profile it belongs to. */
+export interface TrackedStatus {
+  profileId: string;
+  status: InstanceStatus;
 }
 
 /**
@@ -53,9 +62,10 @@ export interface RegisterLaunch {
  * process's own CLAUDE_CONFIG_DIR is read back and compared, so the UI can
  * state that the running process really uses the profile's folder.
  *
- * Profile Switcher never signals, stops, or replaces these processes; the
- * tracker only observes them. Records live in the runtime directory so they
- * survive a Profile Switcher restart.
+ * The tracker only observes processes; it never signals them. (Switch mode
+ * closes instances through runtime/process-closer.ts, and only after the
+ * user confirmed.) Records live in the runtime directory so they survive a
+ * Profile Switcher restart.
  */
 export class ProcessTracker {
   private readonly launches = new Map<string, TrackedLaunch>();
@@ -122,6 +132,16 @@ export class ProcessTracker {
     else this.earlyExits.add(launchId);
   }
 
+  /** Whether a live process is the launched application (and, for markers, this profile's instance). */
+  private matchesLaunch(commandLine: string, launch: TrackedLaunch): boolean {
+    if (!this.matchesExecutable(commandLine, launch.executable)) return false;
+    // Windows only exposes the image name here; the marker was matched
+    // against the full command line when the process was discovered.
+    if (launch.marker && this.system.platform !== 'win32')
+      return commandLineEndsWithArgument(commandLine, launch.marker);
+    return true;
+  }
+
   private matchesExecutable(commandLine: string, executable: string): boolean {
     const caseInsensitive = this.system.platform === 'win32' || this.system.platform === 'darwin';
     const norm = (value: string) => (caseInsensitive ? value.toLowerCase() : value);
@@ -131,13 +151,26 @@ export class ProcessTracker {
     return norm(p.basename(first)) === norm(p.basename(executable));
   }
 
+  /** Finds the main process carrying a launch's marker argument. */
+  private async discoverPid(launch: TrackedLaunch): Promise<number | null> {
+    if (!launch.marker) return null;
+    const found = await this.system.processes.findByFinalArgument(launch.marker);
+    return found && found.length > 0 ? Math.min(...found) : null;
+  }
+
   private async readPid(launch: TrackedLaunch): Promise<number | null> {
     if (launch.pid !== null) return launch.pid;
-    if (launch.tracking !== 'pid-file') return null;
-    const text = await fs
-      .readFile(this.pidFileFor(launch.profileId, launch.launchId), 'utf8')
-      .catch(() => null);
-    const pid = text === null ? NaN : Number.parseInt(text.trim(), 10);
+    let pid: number;
+    if (launch.tracking === 'marker') {
+      pid = (await this.discoverPid(launch)) ?? NaN;
+    } else if (launch.tracking === 'pid-file') {
+      const text = await fs
+        .readFile(this.pidFileFor(launch.profileId, launch.launchId), 'utf8')
+        .catch(() => null);
+      pid = text === null ? NaN : Number.parseInt(text.trim(), 10);
+    } else {
+      return null;
+    }
     if (!Number.isInteger(pid) || pid <= 0) return null;
     launch.pid = pid;
     await writeFileAtomic(
@@ -190,6 +223,8 @@ export class ProcessTracker {
     }
 
     const pid = await this.readPid(launch);
+    if (pid !== null && launch.tracking === 'marker' && (await this.dropDuplicate(launch, pid)))
+      return null;
     if (pid === null) {
       if (age < STARTUP_GRACE_MS)
         return { ...base, pid: null, state: 'starting', configDirectory: 'not-checked' };
@@ -216,7 +251,7 @@ export class ProcessTracker {
     }
 
     const commandLine = await this.system.processes.commandLine(pid);
-    if (commandLine === null || !this.matchesExecutable(commandLine, launch.executable)) {
+    if (commandLine === null || !this.matchesLaunch(commandLine, launch)) {
       // Alive, but it may still be the launcher shell, or the PID may have
       // been reused. Do not call it running.
       return {
@@ -230,8 +265,36 @@ export class ProcessTracker {
       ...base,
       pid,
       state: 'running',
-      configDirectory: await this.configDirectoryState(pid, launch.expectedEnv),
+      // A marker is the profile folder itself, read back from the process.
+      configDirectory: launch.marker
+        ? 'verified'
+        : await this.configDirectoryState(pid, launch.expectedEnv),
     };
+  }
+
+  /**
+   * When an application hands a repeated launch to its already-running
+   * instance (single-instance apps), both launches resolve to one process.
+   * Keep the older record so the instance is listed once.
+   */
+  private async dropDuplicate(launch: TrackedLaunch, pid: number): Promise<boolean> {
+    const older = [...this.launches.values()].some(
+      (other) =>
+        other !== launch &&
+        other.profileId === launch.profileId &&
+        other.pid === pid &&
+        other.startedAt <= launch.startedAt,
+    );
+    if (older) await this.forget(launch);
+    return older;
+  }
+
+  /** Re-checks one launch right now. Null when it is unknown or has exited. */
+  async status(launchId: string): Promise<TrackedStatus | null> {
+    const launch = this.launches.get(launchId);
+    if (!launch) return null;
+    const status = await this.evaluate(launch);
+    return status ? { profileId: launch.profileId, status } : null;
   }
 
   async snapshot(existingProfileIds: ReadonlySet<string>): Promise<RuntimeSnapshot> {

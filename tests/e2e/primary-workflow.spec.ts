@@ -66,6 +66,9 @@ async function launchApp(): Promise<{ app: ElectronApplication; page: Page }> {
       DISPLAY: process.env.DISPLAY ?? '',
       XAUTHORITY: process.env.XAUTHORITY ?? '',
       XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR ?? '',
+      // A fixed OS language: a new installation starts in it when it is supported.
+      LANG: 'en_US.UTF-8',
+      LANGUAGE: 'en_US',
       PROFILE_SWITCHER_DATA_DIR: dataDir,
       PS_E2E_RECORD_FILE: recordFile,
       PS_FAKE_CLAUDE_HOLD: '1',

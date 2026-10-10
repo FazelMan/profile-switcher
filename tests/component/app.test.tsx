@@ -333,3 +333,167 @@ describe('locale catalog', () => {
     expect(format('Hello {missing}', {})).toBe('Hello {missing}');
   });
 });
+
+describe('Switch mode', () => {
+  const personal = makeProfile({ id: 'personal-aaa234', name: 'Personal', color: 'blue' });
+  const work = makeProfile({ id: 'work-abc234', name: 'Work' });
+
+  function switchApi() {
+    const api = createFakeApi(
+      makeSnapshot({
+        profiles: [personal, work],
+        settings: { ...makeSnapshot().settings, launchModes: { 'claude-code': 'switch' } },
+      }),
+    );
+    api.launchProfile.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        kind: 'confirm-switch',
+        running: [{ profileId: personal.id, launchId: 'aaaaaaaaaaaa', pid: 4321 }],
+        untrackedProfileIds: [],
+      },
+    });
+    return api;
+  }
+
+  it('asks before closing, then closes exactly the listed instance', async () => {
+    const api = switchApi();
+    const { user } = renderApp(api);
+    const card = (await screen.findAllByTestId('profile-card'))[1]!;
+    await user.click(within(card).getByRole('button', { name: 'Launch' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Switch to "Work"?' });
+    expect(within(dialog).getByTestId('switch-list')).toHaveTextContent('Personal · PID 4321');
+    expect(dialog).toHaveTextContent(/nothing is forced/);
+    expect(api.launchProfile).toHaveBeenCalledTimes(1);
+    expect(api.launchProfile).toHaveBeenLastCalledWith(work.id, {});
+
+    await user.click(within(dialog).getByRole('button', { name: 'Close and open "Work"' }));
+    await waitFor(() =>
+      expect(api.launchProfile).toHaveBeenLastCalledWith(work.id, {
+        switch: { action: 'close', launchIds: ['aaaaaaaaaaaa'] },
+      }),
+    );
+  });
+
+  it('can open alongside or cancel without closing anything', async () => {
+    const api = switchApi();
+    const { user } = renderApp(api);
+    const card = (await screen.findAllByTestId('profile-card'))[1]!;
+    await user.click(within(card).getByRole('button', { name: 'Launch' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Switch to "Work"?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Open alongside' }));
+    await waitFor(() =>
+      expect(api.launchProfile).toHaveBeenLastCalledWith(work.id, { switch: { action: 'keep' } }),
+    );
+
+    api.launchProfile.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        kind: 'confirm-switch',
+        running: [{ profileId: personal.id, launchId: 'aaaaaaaaaaaa', pid: 4321 }],
+        untrackedProfileIds: [],
+      },
+    });
+    await user.click(within(card).getByRole('button', { name: 'Launch' }));
+    const again = await screen.findByRole('dialog', { name: 'Switch to "Work"?' });
+    await user.click(within(again).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Switch to "Work"?' })).not.toBeInTheDocument(),
+    );
+    expect(api.launchProfile).toHaveBeenCalledTimes(3);
+  });
+
+  it('saves the launch mode per application from Settings', async () => {
+    const api = createFakeApi();
+    const { user } = renderApp(api);
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    const group = screen.getByRole('group', { name: 'Claude Code' });
+    expect(within(group).getByRole('radio', { name: /Run side by side/ })).toBeChecked();
+    await user.click(within(group).getByRole('radio', { name: /Switch/ }));
+    expect(api.updateSettings).toHaveBeenCalledWith({ launchModes: { 'claude-code': 'switch' } });
+  });
+});
+
+describe('experimental Claude Desktop profiles', () => {
+  it('is off by default and turned on only through an explicit, explained setting', async () => {
+    const api = createFakeApi();
+    const { user } = renderApp(api);
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    const section = screen.getByRole('region', { name: 'Experimental' });
+    expect(section).toHaveTextContent(/does not document or support/);
+    const toggle = within(section).getByRole('checkbox', { name: /I understand the risks/ });
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      experimental: { claudeDesktopIsolation: true },
+    });
+  });
+
+  it('labels experimental profiles and lets the user record their own check', async () => {
+    const desktop = makeProfile({
+      id: 'desk-abc234',
+      appId: 'claude-desktop',
+      name: 'Desktop Work',
+      storage: { kind: 'managed' },
+      dataDirectory: '/data/profiles/claude-desktop/desk-abc234',
+      compatibility: {
+        state: 'NeedsVerification',
+        launch: { available: true, isolation: 'experimental' },
+        summary: { code: 'compat.claudeDesktop.experimental.summary' },
+        guarantees: [{ code: 'compat.claudeDesktop.experimental.guarantee.folder' }],
+        limitations: [{ code: 'compat.claudeDesktop.experimental.limitation.signInCallback' }],
+        guidance: [{ code: 'compat.claudeDesktop.experimental.guidance.check' }],
+      },
+    });
+    const snapshot = makeSnapshot({ profiles: [desktop] });
+    snapshot.apps = snapshot.apps.map((app) =>
+      app.experimental ? { ...app, experimental: { ...app.experimental, enabled: true } } : app,
+    );
+    const api = createFakeApi(snapshot);
+    const { user } = renderApp(api);
+    const card = await screen.findByTestId('profile-card');
+    expect(card).toHaveTextContent('Experimental');
+    expect(card).toHaveTextContent('Needs verification');
+    await user.click(within(card).getByRole('button', { name: 'Details: Desktop Work' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('--user-data-dir (undocumented · experimental)');
+    expect(dialog).toHaveTextContent(/claude:\/\/ link/);
+    await user.click(within(dialog).getByRole('button', { name: 'I checked this profile' }));
+    await waitFor(() => expect(api.setManualCheck).toHaveBeenCalledWith('desk-abc234', true));
+  });
+});
+
+describe('Persian', () => {
+  it('switches the interface to Persian, right to left, with Persian digits', async () => {
+    const runtime = {
+      'work-abc234': [
+        {
+          launchId: 'aaaaaaaaaaaa',
+          pid: 4321,
+          startedAt: new Date().toISOString(),
+          state: 'running' as const,
+          configDirectory: 'verified' as const,
+        },
+      ],
+    };
+    const api = createFakeApi(makeSnapshot({ profiles: [makeProfile()], runtime }));
+    const { user } = renderApp(api);
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    await user.selectOptions(screen.getByLabelText('Language'), 'fa');
+    expect(api.updateSettings).toHaveBeenCalledWith({ language: 'fa' });
+
+    await waitFor(() => expect(document.documentElement.dir).toBe('rtl'));
+    expect(document.documentElement.lang).toBe('fa-IR');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('تنظیمات');
+    await user.click(screen.getByRole('button', { name: 'پروفایل‌ها' }));
+    expect(await screen.findByRole('button', { name: 'اجرا' })).toBeInTheDocument();
+    expect(screen.getByTestId('runtime-indicator').getAttribute('title')).toMatch(
+      /^شناسهٔ فرایند \u2068۴۳۲۱\u2069$/,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'تنظیمات' }));
+    await user.selectOptions(screen.getByLabelText('زبان'), 'en');
+    await waitFor(() => expect(document.documentElement.dir).toBe('ltr'));
+  });
+});

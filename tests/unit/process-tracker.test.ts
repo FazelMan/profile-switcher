@@ -47,6 +47,7 @@ async function registerPidFile(
     tracking: 'pid-file',
     pid: null,
     executable: EXE,
+    marker: null,
     expectedEnv: { CLAUDE_CONFIG_DIR: dir },
   });
 }
@@ -155,6 +156,7 @@ describe('ProcessTracker', () => {
       tracking: 'child',
       pid: 401,
       executable: 'C:\\x\\claude.exe',
+      marker: null,
       expectedEnv: {},
     });
     expect((await tracker.snapshot(ids))['work-bbbbbb']?.[0]).toMatchObject({
@@ -171,6 +173,7 @@ describe('ProcessTracker', () => {
       tracking: 'child',
       pid: 401,
       executable: 'C:\\x\\claude.exe',
+      marker: null,
       expectedEnv: {},
     });
     expect((await tracker.snapshot(ids))['work-bbbbbb']).toBeUndefined();
@@ -215,8 +218,8 @@ describe('ProcessTracker', () => {
   });
 });
 
-describe('no termination paths', () => {
-  it('Profile Switcher source never signals or kills other processes', async () => {
+describe('termination paths', () => {
+  it('only the Switch-mode closer can ask another process to quit, and nothing is ever forced', async () => {
     const { readdirSync: readDir, statSync } = await import('node:fs');
     const root = path.resolve(__dirname, '../../src');
     const files: string[] = [];
@@ -228,15 +231,129 @@ describe('no termination paths', () => {
       }
     };
     walk(root);
+    const closer = path.join('main', 'runtime', 'process-closer.ts');
     for (const file of files) {
       const source = readFileSync(file, 'utf8');
-      // process.kill is only ever used with signal 0 (an existence check).
+      // Nothing anywhere force-kills: no SIGKILL, no `taskkill /F`, no pkill/killall.
+      expect(source).not.toMatch(/SIGKILL|pkill|killall|['"]\/F['"]|['"]\/T['"]/);
+      if (path.relative(root, file) === closer) {
+        const kills = [...source.matchAll(/process\.kill\(([^)]*)\)/g)].map((m) => m[1]);
+        expect(kills).toEqual(["pid, 'SIGTERM'"]);
+        continue;
+      }
+      // Everywhere else process.kill is only an existence check (signal 0).
       for (const match of source.matchAll(/process\.kill\(([^)]*)\)/g))
         expect(match[1]).toMatch(/,\s*0$/);
-      expect(source).not.toMatch(/taskkill|pkill|killall|SIGTERM|SIGKILL/);
+      expect(source).not.toMatch(/taskkill|SIGTERM/);
     }
     // The only `.kill()` is the timeout guard for Profile Switcher's own short-lived helper commands.
     const childKills = files.filter((file) => /child\.kill\(\)/.test(readFileSync(file, 'utf8')));
     expect(childKills.map((f) => path.relative(root, f))).toEqual([path.join('main', 'system.ts')]);
+    // The closer is used only by the profile service (Switch mode) and the composition root.
+    const users = files
+      .filter((file) => /ProcessCloser|createNodeQuitRequester/.test(readFileSync(file, 'utf8')))
+      .map((f) => path.relative(root, f))
+      .sort();
+    expect(users).toEqual(
+      [
+        closer,
+        path.join('main', 'index.ts'),
+        path.join('main', 'profiles', 'profile-service.ts'),
+      ].sort(),
+    );
+  });
+});
+
+describe('marker tracking (desktop applications)', () => {
+  const MAC_EXE = '/Applications/Claude.app';
+  const MARKER = '--user-data-dir=/data/profiles/claude-desktop/work-bbbbbb';
+  const MAIN = `/Applications/Claude.app/Contents/MacOS/Claude ${MARKER}`;
+
+  async function registerMarker(tracker: ProcessTracker, launchId: string) {
+    await tracker.register({
+      launchId,
+      profileId: 'work-bbbbbb',
+      tracking: 'marker',
+      pid: null,
+      executable: MAC_EXE,
+      marker: MARKER,
+      expectedEnv: {},
+    });
+  }
+
+  it('finds the main process by its folder argument and reports the folder as confirmed', async () => {
+    const { tracker, processes } = setup({}, 'darwin');
+    await registerMarker(tracker, 'eeeeeeeeeeee');
+    expect((await tracker.snapshot(ids))['work-bbbbbb']?.[0]?.state).toBe('starting');
+
+    processes.table[700] = { commandLine: `Claude Helper --type=renderer ${MARKER}` };
+    processes.table[701] = { commandLine: MAIN };
+    expect((await tracker.snapshot(ids))['work-bbbbbb']).toEqual([
+      expect.objectContaining({ state: 'running', pid: 701, configDirectory: 'verified' }),
+    ]);
+    const record = JSON.parse(
+      readFileSync(path.join(runtimeDir, 'work-bbbbbb.eeeeeeeeeeee.json'), 'utf8'),
+    ) as { pid: number; marker: string };
+    expect(record).toMatchObject({ pid: 701, marker: MARKER });
+
+    delete processes.table[701];
+    expect((await tracker.snapshot(ids))['work-bbbbbb']).toBeUndefined();
+  });
+
+  it('does not call a reused PID running when the process lost the marker', async () => {
+    const { tracker, processes } = setup({ 702: { commandLine: MAIN } }, 'darwin');
+    await registerMarker(tracker, 'eeeeeeeeeeee');
+    expect((await tracker.snapshot(ids))['work-bbbbbb']?.[0]?.state).toBe('running');
+    processes.table[702] = { commandLine: '/Applications/Claude.app/Contents/MacOS/Claude' };
+    expect((await tracker.snapshot(ids))['work-bbbbbb']?.[0]?.state).toBe('starting');
+  });
+
+  it('lists a repeated launch handed to the running instance only once', async () => {
+    const { tracker } = setup({ 703: { commandLine: MAIN } }, 'darwin');
+    await registerMarker(tracker, 'eeeeeeeeeeee');
+    clock = new Date(clock.getTime() + 1000);
+    await registerMarker(tracker, 'ffffffffffff');
+    const instances = (await tracker.snapshot(ids))['work-bbbbbb'] ?? [];
+    expect(instances.map((i) => i.launchId)).toEqual(['eeeeeeeeeeee']);
+  });
+
+  it('becomes unconfirmed when no matching process appears', async () => {
+    const { tracker } = setup({}, 'win32');
+    await registerMarker(tracker, 'eeeeeeeeeeee');
+    clock = new Date(clock.getTime() + 60_000);
+    expect((await tracker.snapshot(ids))['work-bbbbbb']?.[0]?.state).toBe('unconfirmed');
+    clock = new Date(clock.getTime() + 10 * 60_000);
+    expect((await tracker.snapshot(ids))['work-bbbbbb']).toBeUndefined();
+  });
+
+  it('restores 0.1.x launch records that have no marker field', async () => {
+    writeFileSync(
+      path.join(runtimeDir, 'personal-aaaaaa.aaaaaaaaaaaa.json'),
+      JSON.stringify({
+        launchId: 'aaaaaaaaaaaa',
+        profileId: 'personal-aaaaaa',
+        startedAt: clock.toISOString(),
+        tracking: 'pid-file',
+        pid: 900,
+        executable: EXE,
+        expectedEnv: { CLAUDE_CONFIG_DIR: DIR_A },
+      }),
+    );
+    const { tracker } = setup({ 900: { commandLine: EXE, env: { CLAUDE_CONFIG_DIR: DIR_A } } });
+    await tracker.restore();
+    expect((await tracker.snapshot(ids))['personal-aaaaaa']?.[0]).toMatchObject({
+      state: 'running',
+      pid: 900,
+    });
+  });
+
+  it('re-checks a single launch on request', async () => {
+    const { tracker } = setup({ 704: { commandLine: MAIN } }, 'darwin');
+    await registerMarker(tracker, 'eeeeeeeeeeee');
+    expect(await tracker.status('eeeeeeeeeeee')).toMatchObject({
+      profileId: 'work-bbbbbb',
+      status: { state: 'running', pid: 704 },
+    });
+    expect(await tracker.status('000000000000')).toBeNull();
   });
 });

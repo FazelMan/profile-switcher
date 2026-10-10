@@ -8,12 +8,12 @@ import { useI18n } from '../i18n';
  * that merely started a terminal is shown as such, never as running.
  */
 export function RuntimeIndicator({ instances }: { instances: InstanceStatus[] }) {
-  const { ui, format } = useI18n();
+  const { ui, format, number, list } = useI18n();
   const running = instances.filter((i) => i.state === 'running');
   if (running.length > 0) {
     const mismatch = running.some((i) => i.configDirectory === 'mismatch');
     const verified = running.every((i) => i.configDirectory === 'verified');
-    const pids = running.map((i) => i.pid).join(', ');
+    const pids = list(running.flatMap((i) => (i.pid === null ? [] : [number(i.pid)])));
     return (
       <p
         className={`runtime ${mismatch ? 'runtime-danger' : 'runtime-ok'}`}

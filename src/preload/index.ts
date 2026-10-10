@@ -15,7 +15,7 @@ const api: ProfileSwitcherApi = {
   createProfile: (input) => invoke(IPC_CHANNELS.createProfile, input),
   updateProfile: (input) => invoke(IPC_CHANNELS.updateProfile, input),
   deleteProfile: (id) => invoke(IPC_CHANNELS.deleteProfile, id),
-  launchProfile: (id) => invoke(IPC_CHANNELS.launchProfile, id),
+  launchProfile: (id, request) => invoke(IPC_CHANNELS.launchProfile, id, request),
   verifyProfile: (id) => invoke(IPC_CHANNELS.verifyProfile, id),
   openProfileDirectory: (id) => invoke(IPC_CHANNELS.openProfileDirectory, id),
   copyLaunchCommand: (id, shell) => invoke(IPC_CHANNELS.copyLaunchCommand, id, shell),
@@ -26,6 +26,7 @@ const api: ProfileSwitcherApi = {
   openLogsDirectory: () => invoke(IPC_CHANNELS.openLogsDirectory),
   openLink: (id) => invoke(IPC_CHANNELS.openLink, id),
   getRuntime: () => invoke(IPC_CHANNELS.getRuntime),
+  setManualCheck: (id, checked) => invoke(IPC_CHANNELS.setManualCheck, id, checked),
 };
 
 contextBridge.exposeInMainWorld('profileSwitcher', Object.freeze(api));

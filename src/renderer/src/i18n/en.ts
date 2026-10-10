@@ -22,7 +22,7 @@ const messages: Record<MessageCode, string> = {
   'compat.claudeCode.isolated.guarantee.history':
     "Session history, transcripts, and plugins are kept in this profile's folder.",
   'compat.claudeCode.isolated.guarantee.concurrent':
-    'Profiles can run at the same time. Launching one never closes, replaces, or modifies another; each Claude Code process uses only its own folder.',
+    'Profiles can run at the same time, and each Claude Code process uses only its own folder. Launching one never modifies another; it is closed only in Switch mode, after you confirm.',
   'compat.claudeCode.limitation.consoleKeyless':
     'Console sign-ins made without an API key ("Anthropic profiles") are stored outside the configuration folder and are shared between profiles.',
   'compat.claudeCode.limitation.projectFiles':
@@ -52,13 +52,13 @@ const messages: Record<MessageCode, string> = {
   'compat.claudeCode.guidance.unsetProviderEnv':
     'Remove the provider variables from your environment if you want per-profile sign-in.',
   'compat.claudeDesktop.summary':
-    'Separate Claude Desktop profiles are not supported. Opening it uses its normal, shared sign-in.',
+    'Opens Claude Desktop with its normal data and sign-in. Not isolated.',
   'compat.claudeDesktop.limitation.noIsolation':
-    'Anthropic does not document a way to run Claude Desktop with separate data folders, so Profile Switcher cannot keep accounts apart.',
+    "Anthropic does not document a way to run Claude Desktop with separate data folders. This profile uses Claude Desktop's normal data, shared with every ordinary launch.",
   'compat.claudeDesktop.limitation.singleInstance':
     'If Claude Desktop is already running, opening it brings the existing window forward. It does not switch accounts.',
   'compat.claudeDesktop.limitation.noConcurrent':
-    'Running Claude Desktop with two accounts at the same time is not supported. It has not been verified on any OS and relies on undocumented behavior, so Profile Switcher does not attempt it.',
+    'With its normal data, Claude Desktop runs one account at a time.',
   'compat.claudeDesktop.guarantee.opensApp': 'Opens the installed Claude Desktop application.',
   'compat.claudeDesktop.guidance.switchInApp':
     'To use a different account, sign out and sign back in inside Claude Desktop.',
@@ -66,6 +66,32 @@ const messages: Record<MessageCode, string> = {
     'Install Claude Desktop from claude.ai/download, then refresh detection.',
   'compat.claudeDesktop.unsupportedPlatform.summary':
     'Claude Desktop is not available for this operating system.',
+  'compat.claudeDesktop.guidance.enableExperimental':
+    'To keep several accounts side by side, turn on experimental Claude Desktop profiles in Settings, then create a Claude Desktop profile with its own folder.',
+  'compat.claudeDesktop.experimental.summary':
+    "Experimental. Claude Desktop starts with this profile's own data folder through the undocumented --user-data-dir option. Neither Anthropic nor Profile Switcher guarantees that accounts stay separate; check it yourself before relying on it.",
+  'compat.claudeDesktop.experimental.checkedSummary':
+    'Experimental · checked by you. You recorded that this profile keeps its own sign-in with the installed Claude Desktop version. That is your own observation, not a guarantee.',
+  'compat.claudeDesktop.experimental.versionChanged':
+    'Claude Desktop has changed since you checked this profile. The undocumented option may behave differently now; check it again.',
+  'compat.claudeDesktop.experimental.disabled.summary':
+    'This profile has its own Claude Desktop folder, but experimental Claude Desktop profiles are turned off. It is not opened with your shared account instead.',
+  'compat.claudeDesktop.experimental.guarantee.folder':
+    "Claude Desktop is started with this profile's folder as its data folder (--user-data-dir), and Profile Switcher confirms that the running app received it.",
+  'compat.claudeDesktop.experimental.guarantee.untouched':
+    "Profile Switcher never reads, changes, or copies anything inside this folder or Claude Desktop's normal data, and never handles your sign-in.",
+  'compat.claudeDesktop.experimental.limitation.undocumented':
+    'Anthropic does not document or support this option. A Claude Desktop update, or the app restarting itself to install one, may ignore it; the app would then open with your normal account and data.',
+  'compat.claudeDesktop.experimental.limitation.signInCallback':
+    "Signing in through the browser returns to Claude Desktop through a claude:// link that your OS delivers to only one running instance. A sign-in may finish in a different profile's window.",
+  'compat.claudeDesktop.experimental.limitation.notVerifiable':
+    'Profile Switcher cannot see which account a Claude Desktop window is signed in to; only you can check that.',
+  'compat.claudeDesktop.experimental.limitation.sharedSystem':
+    'Anything Claude Desktop keeps outside its data folder (for example OS keychain items or files in your home folder) may still be shared between profiles.',
+  'compat.claudeDesktop.experimental.guidance.signInOneAtATime':
+    'Sign in to one profile at a time: close the other Claude Desktop profiles while you sign in.',
+  'compat.claudeDesktop.experimental.guidance.check':
+    'After signing in to each profile, quit and reopen them, confirm each shows its own account, then record your check in Details.',
   'compat.appNotFound.summary': '{app} was not found on this computer.',
   'compat.unknownApp.summary':
     'This profile targets an application ("{app}") that this version of Profile Switcher does not support.',
@@ -81,9 +107,12 @@ const messages: Record<MessageCode, string> = {
     'Edit the profile and choose an existing working directory.',
   'mechanism.claudeCode': 'CLAUDE_CONFIG_DIR (documented by Anthropic)',
   'mechanism.claudeDesktop': 'No documented mechanism',
+  'mechanism.claudeDesktop.experimental': '--user-data-dir (undocumented · experimental)',
   'launch.note.terminalOpened': 'A terminal window was opened for this profile.',
   'launch.note.processStarted': 'The application process was started.',
   'launch.note.sharedLaunch': "This launch uses the application's shared sign-in.",
+  'launch.note.experimentalLaunch':
+    "Claude Desktop was started with this profile's own data folder (experimental). Check inside the app which account it shows.",
   'launch.note.notProofOfSignIn':
     'Starting a process does not confirm which account is signed in. Use Verify to check.',
   'notice.metadataRecoveredFromBackup':
@@ -219,6 +248,12 @@ const errors: Record<ErrorCode, ErrorText> = {
     reason: 'Profile Switcher could not find the selected terminal application.',
     next: 'Install a terminal, pick another one in Settings, or use Copy command.',
   },
+  SWITCH_CLOSE_FAILED: {
+    title: 'The other profile did not close',
+    reason:
+      '{names} did not quit after being asked. Nothing was forced, and the new profile was not opened.',
+    next: 'Close it yourself (it may be asking to save work), or choose Open alongside.',
+  },
   VERIFICATION_NOT_SUPPORTED: {
     title: 'Verification not available',
     reason: 'This application does not report which configuration it is using.',
@@ -295,7 +330,11 @@ export const en = {
       ApplicationNotFound: 'Not installed',
       ConfigurationError: 'Configuration error',
     },
-    isolation: { isolated: 'Isolated', shared: 'Shared · not isolated' },
+    isolation: {
+      isolated: 'Isolated',
+      experimental: 'Own folder · experimental',
+      shared: 'Shared · not isolated',
+    },
     storageKinds: {
       managed: 'Folder managed by Profile Switcher',
       custom: 'A folder I choose',
@@ -334,6 +373,7 @@ export const en = {
       copyCommand: 'Copy command',
       readOnly: 'Read-only: changes are disabled.',
       empty: 'No profiles for this application yet.',
+      experimentalBadge: 'Experimental',
     },
     firstRun: {
       title: 'Set up your first profiles',
@@ -377,6 +417,8 @@ export const en = {
         'Off by default. When on, variables such as ANTHROPIC_API_KEY reach the application and override this profile’s own sign-in.',
       isolationDocumented: 'Isolation: {mechanism}',
       isolationNotDocumented: 'Isolation: not supported',
+      experimentalStorage:
+        'Experimental: Claude Desktop does not officially support separate folders. Read the notes on the profile before relying on it.',
       detected: 'Installed{version}',
       notDetected: 'Not found',
       unsupportedPlatform: 'Not available on this OS',
@@ -435,6 +477,17 @@ export const en = {
       lastLaunch: 'Last launch',
       created: 'Created',
       appVersion: 'Version',
+      manualCheck: {
+        title: 'Your own check',
+        help: 'Profile Switcher cannot check which account Claude Desktop uses. After following the steps above, record that you checked this profile. The record applies only to the Claude Desktop version installed now.',
+        none: 'Not checked yet.',
+        checked: 'You checked this profile {time} with Claude Desktop {version}.',
+        unknownVersion: '(version unknown)',
+        mark: 'I checked this profile',
+        clear: 'Remove my check',
+        saved: 'Your check was recorded.',
+        cleared: 'Your check was removed.',
+      },
     },
     delete: {
       title: 'Delete "{name}"?',
@@ -457,7 +510,7 @@ export const en = {
       pidTitle: 'Process ID {pids}',
       instancesTitle: 'Running instances',
       instancesHelp:
-        'Each launch is independent. Profile Switcher never closes, replaces, or signals these processes; close them in their own windows.',
+        'Each launch is independent. Profile Switcher closes these only in Switch mode, after you confirm; otherwise close them in their own windows.',
       none: 'No running instances detected.',
       states: {
         starting: 'Starting',
@@ -473,8 +526,20 @@ export const en = {
       pid: 'PID {pid}',
       started: 'started {time}',
     },
+    switchDialog: {
+      title: 'Switch to "{name}"?',
+      body: 'Switch mode is on for {app}. These profiles are running and will be asked to quit before "{name}" opens:',
+      instance: '{profile} · PID {pid}',
+      warning:
+        'They are asked to quit normally, as if you closed their window; nothing is forced. Unsaved work in them may be lost, and Claude Code sessions in them end.',
+      untracked: 'These profiles may also be open, but Profile Switcher cannot close them: {names}',
+      close: 'Close and open "{name}"',
+      alongside: 'Open alongside',
+      closing: 'Closing…',
+    },
     launch: {
       success: 'Launched "{name}" in {terminal}.',
+      switched: 'Closed {closed} and opened "{name}".',
       successDirect: 'Opened {app} for "{name}".',
       commandCopied: 'Launch command for "{name}" copied. Paste it into a terminal.',
     },
@@ -484,7 +549,7 @@ export const en = {
       theme: 'Theme',
       themes: { system: 'System', light: 'Light', dark: 'Dark' },
       language: 'Language',
-      languages: { en: 'English' },
+      languages: { en: 'English', fa: 'فارسی' },
       languageHelp: 'Additional languages can be contributed; see CONTRIBUTING.md.',
       launchBehavior: 'Command-line applications',
       launchBehaviorLabel: 'Primary action',
@@ -508,6 +573,29 @@ export const en = {
         xterm: 'XTerm',
         'windows-console': 'Windows console',
       },
+      launchModes: 'Running several profiles',
+      launchModesHelp:
+        'What happens when you launch a profile while other profiles of the same application are running.',
+      modes: {
+        concurrent: 'Run side by side',
+        switch: 'Switch: offer to close the others first',
+      },
+      modeHelp: {
+        concurrent: 'The profile opens in addition to the ones already running. Nothing is closed.',
+        switch:
+          'Profile Switcher lists the other running profiles and closes them only after you confirm. They are asked to quit normally; nothing is forced.',
+      },
+      windowsSwitchNote:
+        'On Windows, Claude Code in a console window cannot be asked to quit; you will be told to close it yourself.',
+      experimental: 'Experimental',
+      experimentalHelp:
+        'Features that rely on undocumented behavior of other applications. They are off by default and may stop working after an update of those applications.',
+      claudeDesktopIsolation: 'Separate Claude Desktop profiles',
+      claudeDesktopIsolationHelp:
+        "Lets Claude Desktop profiles have their own folder, so several accounts can run side by side. It uses Chromium's --user-data-dir option, which Anthropic does not document or support: an update may break it, browser sign-ins may finish in the wrong window, and Profile Switcher cannot confirm which account each window uses.",
+      claudeDesktopIsolationToggle: 'Turn on (I understand the risks above)',
+      claudeDesktopIsolationOffNote:
+        'Turning it off keeps your Claude Desktop profiles and their folders, but they cannot be opened until it is on again.',
       applications: 'Applications',
       notFound: 'Not found',
       unsupported: 'Not available on this OS',

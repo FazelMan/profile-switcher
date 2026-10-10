@@ -1,4 +1,9 @@
-/* Profile Switcher — design tokens and component styles. No external fonts or assets. */
+/*
+ * Profile Switcher — design tokens and component styles. No remote fonts or
+ * assets: the only bundled font is Vazirmatn (OFL-1.1) for Persian text.
+ * Layout uses logical properties (inline-start/end) so it mirrors in
+ * right-to-left languages.
+ */
 
 :root {
   color-scheme: light;
@@ -38,6 +43,15 @@
   --c-rose: #e11d48;
   --c-teal: #0d9488;
   --c-orange: #ea6a0c;
+}
+
+:root[lang|='fa'] {
+  --font-sans: 'Vazirmatn Variable', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+}
+
+/* Letter-spacing breaks the joining of Arabic-script letters. */
+:root[dir='rtl'] h1 {
+  letter-spacing: normal;
 }
 
 :root[data-theme='dark'] {
@@ -142,6 +156,9 @@ p {
   font-family: var(--font-mono);
   font-size: 12.5px;
   word-break: break-all;
+  /* Paths and commands always read left to right, also in RTL languages. */
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 :focus-visible {
@@ -151,7 +168,7 @@ p {
 
 .skip-link {
   position: absolute;
-  left: 8px;
+  inset-inline-start: 8px;
   top: -40px;
   padding: 6px 10px;
   background: var(--surface);
@@ -528,6 +545,32 @@ main:focus {
   white-space: nowrap;
 }
 
+.pill-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.switch-list {
+  margin: 10px 0;
+  padding-inline-start: 18px;
+  font-weight: 600;
+}
+
+.switch-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.manual-check {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -609,7 +652,7 @@ main:focus {
 
 .instances ul {
   margin: 6px 0 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
 }
 
 .instances li + li {
@@ -859,14 +902,15 @@ textarea[aria-invalid='true'] {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-left: 24px;
+  margin-inline-start: 24px;
 }
 
 .path-picker {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 6px 6px 10px;
+  padding-block: 6px;
+  padding-inline: 10px 6px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -1006,7 +1050,7 @@ textarea[aria-invalid='true'] {
 
 .message-list ul {
   margin: 6px 0 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
 }
 
 .message-list li + li {
@@ -1130,7 +1174,7 @@ textarea[aria-invalid='true'] {
 
 .toasts {
   position: fixed;
-  right: 20px;
+  inset-inline-end: 20px;
   bottom: 20px;
   display: flex;
   flex-direction: column;
@@ -1143,10 +1187,11 @@ textarea[aria-invalid='true'] {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  padding: 12px 10px 12px 14px;
+  padding-block: 12px;
+  padding-inline: 14px 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left-width: 4px;
+  border-inline-start-width: 4px;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
 }
@@ -1162,7 +1207,7 @@ textarea[aria-invalid='true'] {
 }
 
 .toast-success {
-  border-left-color: var(--ok);
+  border-inline-start-color: var(--ok);
 }
 
 .toast-success > .icon {
@@ -1170,7 +1215,7 @@ textarea[aria-invalid='true'] {
 }
 
 .toast-error {
-  border-left-color: var(--danger);
+  border-inline-start-color: var(--danger);
 }
 
 .toast-error > .icon {
@@ -1178,7 +1223,7 @@ textarea[aria-invalid='true'] {
 }
 
 .toast-info {
-  border-left-color: var(--info);
+  border-inline-start-color: var(--info);
 }
 
 .toast > .icon {
@@ -1217,6 +1262,8 @@ textarea[aria-invalid='true'] {
 }
 
 .diagnostics {
+  direction: ltr;
+  text-align: left;
   margin: 0;
   padding: 16px;
   font-family: var(--font-mono);

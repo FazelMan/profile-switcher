@@ -32,6 +32,9 @@ In scope, for example:
 - Command or argument injection through profile fields, paths, or settings.
 - Profile Switcher reading, writing, copying, or logging credentials.
 - One profile's launch reading or modifying another profile's data.
+- Profile Switcher closing or signaling a process without your confirmation,
+  closing a process it did not launch for another profile, or forcing a
+  process to terminate.
 - Path traversal or writes outside the documented directories.
 - Leaking secrets through logs or diagnostics.
 
@@ -47,5 +50,6 @@ Out of scope:
 See the [Security model](README.md#security-model) and
 [docs/architecture.md](docs/architecture.md) for the full design: sandboxed
 renderer, sender-checked and schema-validated IPC, shell-free process
-launching, descriptor hygiene on Linux, strict metadata schemas, allow-listed
-external links, and redacted local logs.
+launching, descriptor hygiene on Linux, a single confirmation-gated module
+that may ask processes to quit (Switch mode; never forced), strict metadata
+schemas, allow-listed external links, and redacted local logs.

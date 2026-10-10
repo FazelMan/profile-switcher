@@ -6,6 +6,7 @@ import type {
 } from '@shared/domain/compatibility';
 import type { Message } from '@shared/domain/messages';
 import type { IsolationLevel, Profile, StorageKind } from '@shared/domain/profile';
+import type { ExperimentalFeature, ExperimentalSettings } from '@shared/domain/settings';
 import type { VerificationReport } from '@shared/ipc';
 import type { EnvChanges } from '../launch/environment';
 import type { SupportedPlatform } from '../platform';
@@ -25,6 +26,7 @@ export interface EvaluationInput {
   fsState: ProfileFsState;
   detection: DetectionResult;
   system: SystemContext;
+  experimental: ExperimentalSettings;
 }
 
 /** A command-line application launched inside a terminal window. */
@@ -42,6 +44,13 @@ export interface DesktopLaunchPlan {
   type: 'desktop';
   /** App bundle (macOS) or executable (Windows). */
   target: string;
+  /** Arguments for the application. Empty for an ordinary launch. */
+  args: string[];
+  /**
+   * The last argument, unique to this profile, by which the application's
+   * main process is found after launch. Null when the launch is not tracked.
+   */
+  marker: string | null;
   isolation: IsolationLevel;
 }
 
@@ -52,6 +61,17 @@ export interface LaunchPlanInput {
   dataDirectory: string | null;
   detection: DetectionResult;
   system: SystemContext;
+  experimental: ExperimentalSettings;
+}
+
+/**
+ * Isolation that rests on undocumented application behavior. Its storage
+ * kinds are offered only while the user has turned the feature on.
+ */
+export interface ExperimentalIsolation {
+  feature: ExperimentalFeature;
+  storageKinds: readonly StorageKind[];
+  mechanism: Message;
 }
 
 /**
@@ -73,6 +93,7 @@ export interface AppAdapter {
   readonly supportsWorkingDirectory: boolean;
   readonly supportsVerification: boolean;
   readonly supportsCopyCommand: boolean;
+  readonly experimental?: ExperimentalIsolation;
 
   /** The application's own default configuration locations. Custom profile directories may not overlap these. */
   reservedDirectories(system: SystemContext): string[];

@@ -1,5 +1,6 @@
 import { AppFailure } from '@shared/domain/errors';
-import type { DirectoryChoice } from '@shared/ipc';
+import type { Language } from '@shared/domain/settings';
+import type { DirectoryChoice, LaunchResult } from '@shared/ipc';
 import { buildDiagnosticsReport } from '../diagnostics/report';
 import type { Redactor } from '../diagnostics/redact';
 import type { Logger } from '../diagnostics/logger';
@@ -17,6 +18,8 @@ export interface DesktopIntegration {
   openExternal(url: string): Promise<void>;
   writeClipboard(text: string): void;
   applyTheme(theme: 'system' | 'light' | 'dark'): void;
+  /** Rebuilds native UI (menu, dialog titles) in the chosen language. */
+  applyLanguage(language: Language): void;
 }
 
 export interface HandlerDeps {
@@ -59,9 +62,14 @@ export function createIpcHandlers({
       const retainedDirectory = await service.delete(id);
       return { snapshot: await service.snapshot(), retainedDirectory };
     },
-    'profiles:launch': async (id) => {
-      const report = await service.launch(id);
-      return { snapshot: await service.snapshot(), report };
+    'profiles:launch': async (id, request): Promise<LaunchResult> => {
+      const outcome = await service.launch(id, request);
+      if (outcome.kind === 'confirm-switch') return outcome;
+      return { kind: 'launched', snapshot: await service.snapshot(), report: outcome.report };
+    },
+    'profiles:set-manual-check': async (id, checked) => {
+      await service.setManualCheck(id, checked);
+      return service.snapshot();
     },
     'profiles:verify': (id) => service.verify(id),
     'profiles:open-directory': async (id) => openDirectory(await service.directoryToOpen(id)),
@@ -73,6 +81,7 @@ export function createIpcHandlers({
     'settings:update': async (patch) => {
       await service.updateSettings(patch);
       if (patch.theme) desktop.applyTheme(patch.theme);
+      if (patch.language) desktop.applyLanguage(patch.language);
       return service.snapshot();
     },
     'dialog:choose-directory': async (purpose): Promise<DirectoryChoice | null> => {

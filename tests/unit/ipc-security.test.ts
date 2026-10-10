@@ -110,8 +110,22 @@ describe('IPC argument validation', () => {
   const invalid: Array<[string, unknown[]]> = [
     ['profiles:launch', []],
     ['profiles:launch', ['../../etc']],
+    ['profiles:launch', ['work-abc']],
     ['profiles:launch', ['work-abc', 'extra']],
+    ['profiles:launch', ['work-abc', {}, 'extra']],
     ['profiles:launch', [{ id: 'work-abc' }]],
+    ['profiles:launch', ['work-abc', { switch: { action: 'kill' } }]],
+    ['profiles:launch', ['work-abc', { switch: { action: 'close', launchIds: [] } }]],
+    ['profiles:launch', ['work-abc', { switch: { action: 'close', launchIds: ['1234; rm'] } }]],
+    ['profiles:launch', ['work-abc', { switch: { action: 'close', pids: [1] } }]],
+    ['profiles:launch', ['work-abc', { switch: { action: 'keep' }, force: true }]],
+    ['profiles:set-manual-check', ['work-abc', 'yes']],
+    ['profiles:set-manual-check', ['work-abc']],
+    ['settings:update', [{ launchModes: { 'claude-code': 'exclusive' } }]],
+    ['settings:update', [{ launchModes: { '../x': 'switch' } }]],
+    ['settings:update', [{ experimental: { claudeDesktopIsolation: 'yes' } }]],
+    ['settings:update', [{ experimental: { claudeDesktopIsolation: true, other: true } }]],
+    ['settings:update', [{ language: 'de' }]],
     ['profiles:delete', ['WORK']],
     ['profiles:open-directory', ['/etc']],
     ['profiles:copy-command', ['work-abc', 'zsh; rm -rf /']],
@@ -184,7 +198,7 @@ describe('IPC error conversion', () => {
         throw new AppFailure('LAUNCH_FAILED', undefined, 'spawn failed: ENOENT');
       },
     });
-    await expect(invoke('profiles:launch', trusted, 'work-abc')).resolves.toEqual({
+    await expect(invoke('profiles:launch', trusted, 'work-abc', {})).resolves.toEqual({
       ok: false,
       error: { code: 'LAUNCH_FAILED', detail: 'spawn failed: ENOENT' },
     });
@@ -196,7 +210,7 @@ describe('IPC error conversion', () => {
         throw new Error('boom at /home/ana/secret with sk-ant-123');
       },
     });
-    const result = await invoke('profiles:launch', trusted, 'work-abc');
+    const result = await invoke('profiles:launch', trusted, 'work-abc', {});
     expect(result).toEqual({ ok: false, error: { code: 'INTERNAL_ERROR' } });
     expect(JSON.stringify(result)).not.toMatch(/boom|sk-ant|stack/);
   });

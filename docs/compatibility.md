@@ -20,13 +20,14 @@ in with.
 
 ## Matrix
 
-| Application    | OS                 | Isolation                                | Concurrent profiles | Launch                                      | "Running" detection                                                | Running process's folder checked     |
-| -------------- | ------------------ | ---------------------------------------- | ------------------- | ------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
-| Claude Code    | Linux x64          | **Supported** (documented; see evidence) | **Supported**       | New terminal window, or copy command        | PID recorded by the launched shell + `/proc` identity              | Yes (`/proc/<pid>/environ`)          |
-| Claude Code    | macOS (arm64, x64) | **Supported** (documented)               | **Supported**       | New Terminal/iTerm window, or copy command  | PID recorded by the launched shell + `ps` identity                 | No (macOS hides it); set at launch   |
-| Claude Code    | Windows x64        | **Supported** (documented)               | **Supported**       | New console window, or copy command         | Native `claude.exe`: process handle. npm `claude.cmd`: not tracked | No (Windows hides it); set at launch |
-| Claude Desktop | macOS, Windows     | **Unsupported**                          | **Unsupported**     | Shared launch only, labeled "Open (shared)" | macOS: not tracked. Windows: process handle                        | n/a                                  |
-| Claude Desktop | Linux              | **Unsupported** (no official build)      | **Unsupported**     | Not available                               | n/a                                                                | n/a                                  |
+| Application    | OS                 | Isolation                                                                                                    | Concurrent profiles      | Launch                                                                     | "Running" detection                                                      | Running process's folder checked                                  |
+| -------------- | ------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Claude Code    | Linux x64          | **Supported** (documented; see evidence)                                                                     | **Supported**            | New terminal window, or copy command                                       | PID recorded by the launched shell + `/proc` identity                    | Yes (`/proc/<pid>/environ`)                                       |
+| Claude Code    | macOS (arm64, x64) | **Supported** (documented)                                                                                   | **Supported**            | New Terminal/iTerm window, or copy command                                 | PID recorded by the launched shell + `ps` identity                       | No (macOS hides it); set at launch                                |
+| Claude Code    | Windows x64        | **Supported** (documented)                                                                                   | **Supported**            | New console window, or copy command                                        | Native `claude.exe`: process handle. npm `claude.cmd`: not tracked       | No (Windows hides it); set at launch                              |
+| Claude Desktop | macOS, Windows     | **Unsupported** (default profile)                                                                            | **Unsupported**          | Shared launch, labeled "Open (shared)"                                     | macOS: not tracked. Windows: process handle                              | n/a                                                               |
+| Claude Desktop | macOS, Windows     | **Experimental, opt-in** (own folder; undocumented) — **Needs verification** until you record your own check | Possible, not guaranteed | `--user-data-dir=<folder>` as last argument (macOS: `open -n -a … --args`) | Main process found by its folder argument (`ps` / CIM), helpers excluded | Yes: the folder is read back from the main process's command line |
+| Claude Desktop | Linux              | **Unsupported** (no official build)                                                                          | **Unsupported**          | Not available                                                              | n/a                                                                      | n/a                                                               |
 
 "Documented" means the vendor documents the mechanism. Device verification
 status is listed below; macOS and Windows builds are compiled and unit-tested
@@ -73,8 +74,9 @@ and for credential storage ([Credential management](https://code.claude.com/docs
   profile's folder. It also shows the sign-in state and account the CLI reports
   (shown only; never stored or logged).
 - **Concurrency.** Each launch is independent: a new terminal window and a new
-  process, with no shared state written by Profile Switcher. Profile Switcher
-  never closes, signals, or replaces a running process.
+  process, with no shared state written by Profile Switcher. In the default
+  **Concurrent** launch mode, Profile Switcher never closes, signals, or
+  replaces a running process (see [Launch modes](#launch-modes) for Switch).
 - **Running state.** A profile is shown as running only when its process is
   found alive _and_ identified as the launched executable. A successful spawn
   alone is never reported as running. Launches that cannot be followed are
@@ -106,23 +108,57 @@ and for credential storage ([Credential management](https://code.claude.com/docs
 
 ## Claude Desktop
 
-### Why isolation is reported as unsupported
+### Default: shared launch only
 
 - Anthropic documents no supported way to run Claude Desktop with separate
-  data folders or with two signed-in accounts at once. Community tools use
-  Chromium's `--user-data-dir` flag; that is undocumented for Claude Desktop,
-  may change in any update, and cannot be verified from outside the app.
-- The `claude://` protocol handler used to complete sign-in is registered once
-  per OS, so a second instance's sign-in may return to the wrong window.
-- This project has no verified evidence that concurrent instances work on any
-  OS.
+  data folders or with two signed-in accounts at once.
+- A Claude Desktop profile using "The application's default configuration"
+  opens the app normally, labeled **Open (shared)**. It is reported as
+  **Unsupported** isolation. To switch accounts there, sign out and in within
+  Claude Desktop.
 
-Profile Switcher therefore never passes undocumented flags, never touches
-Claude Desktop's data folder, and offers only an ordinary launch labeled
-**Open (shared)**. To switch accounts, sign out and in within Claude Desktop.
-[Manual test plan §3](manual-test-plan.md#3-claude-desktop--isolation-research-protocol-not-a-product-feature)
-describes how to gather evidence; the adapter can only change after positive,
-documented results on every supported OS.
+### Experimental: separate profiles (opt-in)
+
+Turned on in **Settings → Experimental → Separate Claude Desktop profiles**
+(off by default; the setting explains the risks before it can be enabled).
+Then a Claude Desktop profile can use a managed or chosen folder, and
+launching it starts Claude Desktop with Chromium's
+`--user-data-dir=<profile folder>` as the **last** argument:
+
+- macOS: `open -n -a <Claude.app> --args --user-data-dir=<folder>`. `open`
+  keeps Claude Desktop its own app for permission prompts; `-n` starts a
+  separate instance.
+- Windows: the detected `claude.exe` is started directly with the argument.
+
+What Profile Switcher can confirm: the running Claude Desktop **main process**
+received this profile's folder. It is found by its final argument (`ps` on
+macOS, CIM `Win32_Process` on Windows; helper processes, which carry
+`--type=`, are ignored), and only then is the profile shown as running.
+
+What it cannot confirm, and why these profiles show **Needs verification**:
+
+- `--user-data-dir` is a Chromium option that Anthropic does not document or
+  support for Claude Desktop. An update, or the app restarting itself to
+  install one, may not keep it; the app would then open with your normal data
+  and account.
+- Signing in through the browser returns through a `claude://` link, and the
+  OS delivers that link to only one running instance, so a sign-in may finish
+  in another profile's window. Sign in to one profile at a time.
+- Profile Switcher cannot see which account a window is signed in to.
+- Anything Claude Desktop keeps outside its data folder (keychain items, files
+  in the home folder) may be shared between profiles.
+
+After following [manual test plan §3](manual-test-plan.md#3-claude-desktop--experimental-separate-profiles),
+you can record your own check in the profile's Details. The profile then
+shows **Supported** with the isolation still labeled _experimental_ and a
+summary saying the check was yours. The record is tied to the Claude Desktop
+version detected at the time (macOS: `CFBundleShortVersionString`; Windows:
+the newest `app-<version>` folder) and stops counting when that version
+changes. Turning the feature off disables these profiles; they are never
+opened with the shared account instead.
+
+Profile Switcher never reads, writes, or copies anything inside these folders
+or Claude Desktop's normal data, and never handles tokens.
 
 ### Detection
 
@@ -130,6 +166,29 @@ documented results on every supported OS.
 - Windows: `%LOCALAPPDATA%\AnthropicClaude\claude.exe`,
   `%LOCALAPPDATA%\Programs\Claude\Claude.exe`, `%ProgramFiles%\Claude\Claude.exe`.
   Microsoft Store (MSIX) installs are not detected.
+
+## Launch modes
+
+Chosen per application in **Settings → Running several profiles**:
+
+- **Concurrent** (default): launching a profile never affects other running
+  profiles.
+- **Switch**: if other profiles of the same application are running (confirmed
+  running by the tracker), nothing is launched yet. A dialog lists exactly
+  those instances with **Close and open**, **Open alongside**, and **Cancel**.
+  On **Close and open**, each listed instance is re-identified, must belong to
+  another profile of the same application, and is asked to quit normally:
+  SIGTERM on macOS/Linux, `taskkill /PID <pid>` without `/F` on Windows.
+  Profile Switcher waits up to 10 seconds for each to exit. If one does not,
+  the new profile is not opened and the error names the profile. Nothing is
+  ever forced, and instances that started after the dialog appeared are not
+  touched.
+
+| Platform | Claude Code instance                                | Claude Desktop instance (experimental)                                                        |
+| -------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Linux    | SIGTERM; tested with real processes (stand-in)      | n/a                                                                                           |
+| macOS    | SIGTERM (unit-tested; not yet verified on a device) | SIGTERM to the main process (not yet verified)                                                |
+| Windows  | Cannot be asked to quit (console); user closes it   | Close message to its windows; the app may stay in the tray, then it is reported as not closed |
 
 ## Adding an application
 

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MetadataStore } from '../../src/main/storage/metadata-store';
-import { createDefaultDocument } from '../../src/main/storage/schema';
+import { createDefaultDocument, CURRENT_SCHEMA_VERSION } from '../../src/main/storage/schema';
 import type { Profile } from '../../src/shared/domain/profile';
 import { nullLogger } from '../helpers/fake-system';
 
@@ -31,6 +31,7 @@ function profile(id: string, name: string): Profile {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     lastLaunch: null,
+    manualCheck: null,
   };
 }
 
@@ -170,7 +171,7 @@ describe('MetadataStore', () => {
     expect(outcome.notices).toEqual([]);
     expect(s.current().profiles.map((p) => p.name)).toEqual(['A']);
     expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       profiles: [{ id: 'a-1' }],
     });
     expect(JSON.parse(readFileSync(`${file}.v0.bak`, 'utf8'))).toEqual(legacy);

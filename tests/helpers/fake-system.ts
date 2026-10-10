@@ -1,5 +1,6 @@
 import { createNullLogger } from '../../src/main/diagnostics/logger';
 import {
+  commandLineEndsWithArgument,
   createNodeProcessInspector,
   nodeFileProbe,
   type CommandRunner,
@@ -53,6 +54,14 @@ export function fakeFiles(
     },
     async readTextFile(p) {
       return contents[p] ?? null;
+    },
+    async listDirectory(p) {
+      if (entries[p] !== 'dir') return null;
+      const separator = p.includes('\\') ? '\\' : '/';
+      const prefix = p.endsWith(separator) ? p : `${p}${separator}`;
+      return Object.keys(entries)
+        .filter((key) => key.startsWith(prefix) && !key.slice(prefix.length).includes(separator))
+        .map((key) => key.slice(prefix.length));
     },
   };
 }
@@ -111,6 +120,10 @@ export function fakeProcesses(
     commandLine: async (pid) => table[pid]?.commandLine ?? null,
     environmentVariable: async (pid, name) =>
       table[pid] ? (table[pid]!.env?.[name] ?? null) : null,
+    findByFinalArgument: async (marker) =>
+      Object.entries(table)
+        .filter(([, entry]) => commandLineEndsWithArgument(entry.commandLine, marker))
+        .map(([pid]) => Number(pid)),
   };
 }
 

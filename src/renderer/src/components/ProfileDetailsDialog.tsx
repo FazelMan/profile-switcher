@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BadgeCheck, ClipboardCopy, FolderOpen, Play, ShieldAlert } from 'lucide-react';
+import { BadgeCheck, ClipboardCopy, FolderOpen, Play, ShieldAlert, Undo2 } from 'lucide-react';
 import type { CommandShell } from '@shared/domain/compatibility';
 import type { AppError } from '@shared/domain/errors';
 import type { Message } from '@shared/domain/messages';
@@ -12,6 +12,7 @@ import { ErrorPanel } from './ErrorPanel';
 import { Modal } from './Modal';
 import { InstanceList } from './RuntimeStatus';
 import { StatusBadge } from './StatusBadge';
+import { SwitchDialog } from './SwitchDialog';
 
 function MessageList({
   title,
@@ -32,6 +33,63 @@ function MessageList({
           <li key={item.code}>{message(item)}</li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * For experimental profiles: the user's own record that they checked the
+ * profile keeps its own sign-in. Shown as the user's observation, never as a
+ * verification by Profile Switcher.
+ */
+function ManualCheck({ profile, version }: { profile: ProfileView; version: string | null }) {
+  const { api, call, applySnapshot, notify, snapshot } = useController();
+  const { ui, format, relativeTime } = useI18n();
+  const [saving, setSaving] = useState(false);
+  const check = profile.manualCheck;
+  const text = ui.details.manualCheck;
+
+  const update = async (checked: boolean) => {
+    setSaving(true);
+    const result = await call(() => api.setManualCheck(profile.id, checked));
+    setSaving(false);
+    if (!result.ok) return;
+    applySnapshot(result.value);
+    notify({ kind: 'success', title: checked ? text.saved : text.cleared });
+  };
+
+  return (
+    <section className="manual-check" aria-labelledby={`manual-check-${profile.id}`}>
+      <h3 id={`manual-check-${profile.id}`}>{text.title}</h3>
+      <p className="field-help">{text.help}</p>
+      <p>
+        {check
+          ? format(text.checked, {
+              time: relativeTime(check.at),
+              version: check.appVersion ?? text.unknownVersion,
+            })
+          : text.none}
+      </p>
+      <div className="button-row">
+        <Button
+          icon={<BadgeCheck className="icon" aria-hidden="true" />}
+          loading={saving}
+          disabled={snapshot?.readOnly || (check !== null && check.appVersion === version)}
+          onClick={() => void update(true)}
+        >
+          {text.mark}
+        </Button>
+        {check && (
+          <Button
+            variant="ghost"
+            icon={<Undo2 className="icon" aria-hidden="true" />}
+            disabled={saving || snapshot?.readOnly}
+            onClick={() => void update(false)}
+          >
+            {text.clear}
+          </Button>
+        )}
+      </div>
     </section>
   );
 }
@@ -120,7 +178,8 @@ export function ProfileDetailsDialog({
   const { api, call, snapshot, runtime } = useController();
   const { ui, message, dateTime, relativeTime } = useI18n();
   const app = snapshot?.apps.find((a) => a.id === profile.appId);
-  const { busy, launch, copyCommand } = useProfileActions(profile, app);
+  const { busy, launch, copyCommand, pendingSwitch, resolveSwitch, cancelSwitch } =
+    useProfileActions(profile, app);
   const [verifying, setVerifying] = useState(false);
   const [verification, setVerification] = useState<VerificationReport | null>(null);
   const [verifyError, setVerifyError] = useState<AppError | null>(null);
@@ -154,7 +213,7 @@ export function ProfileDetailsDialog({
             variant="primary"
             icon={<Play className="icon" aria-hidden="true" />}
             disabled={!compatibility.launch.available}
-            loading={busy === 'launch'}
+            loading={busy === 'launch' || busy === 'switch'}
             onClick={() => void launch()}
           >
             {compatibility.launch.isolation === 'shared'
@@ -164,6 +223,16 @@ export function ProfileDetailsDialog({
         </>
       }
     >
+      {pendingSwitch && (
+        <SwitchDialog
+          profile={profile}
+          app={app}
+          pending={pendingSwitch}
+          busy={busy === 'copy' ? null : busy}
+          onResolve={(choice) => void resolveSwitch(choice)}
+          onCancel={cancelSwitch}
+        />
+      )}
       <div className="details">
         <section className="details-status">
           <StatusBadge report={compatibility} />
@@ -182,7 +251,13 @@ export function ProfileDetailsDialog({
 
         <dl className="kv">
           <dt>{ui.details.mechanism}</dt>
-          <dd>{app ? message(app.mechanism) : ui.common.unknown}</dd>
+          <dd>
+            {compatibility.launch.isolation === 'experimental' && app?.experimental
+              ? message(app.experimental.mechanism)
+              : app
+                ? message(app.mechanism)
+                : ui.common.unknown}
+          </dd>
           <dt>{ui.details.folder}</dt>
           <dd>
             {profile.dataDirectory ? (
@@ -231,6 +306,9 @@ export function ProfileDetailsDialog({
           )}
         </div>
         {app?.supportsVerification && <p className="field-help">{ui.details.verifyHelp}</p>}
+        {app?.experimental && profile.storage.kind !== 'app-default' && (
+          <ManualCheck profile={profile} version={app.detection.version} />
+        )}
         {verifyError && <ErrorPanel error={verifyError} compact />}
         {verification && <VerificationResult report={verification} />}
 

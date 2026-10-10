@@ -7,6 +7,51 @@ section matching the pushed tag as the GitHub Release notes.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-10
+
+### Added
+
+- **Launch modes per application** (Settings → Running several profiles).
+  _Concurrent_ (the default) keeps 0.1.0's behavior: launching a profile never
+  affects others. _Switch_: when other profiles of the same application are
+  running, launching asks first and offers **Close and open**, **Open
+  alongside**, or **Cancel**. Only the listed instances are closed, only after
+  you confirm, only while they are still identified as the application
+  Profile Switcher launched, and only by asking them to quit normally
+  (SIGTERM on macOS/Linux, `taskkill` without `/F` on Windows). Nothing is
+  forced; a process that does not quit is left running and the new profile is
+  not opened.
+- **Experimental separate Claude Desktop profiles** (Settings → Experimental,
+  off by default). A Claude Desktop profile can have its own folder and is
+  started with Chromium's undocumented `--user-data-dir` option, so several
+  accounts can run side by side. These profiles are labeled experimental and
+  show **Needs verification** until you record your own check, which is tied
+  to the installed Claude Desktop version. Profile Switcher confirms the
+  running app received the profile's folder (main process found by its final
+  argument); it cannot confirm which account a window uses. Turning the
+  feature off disables these profiles instead of opening the shared account.
+- **Persian (فارسی) interface**, fully translated, laid out right to left,
+  with Persian digits and calendar, a bundled Vazirmatn typeface (OFL-1.1),
+  and a localized application menu. A new installation starts in the system
+  language when it is supported.
+- The installed Claude Desktop version is now detected on Windows.
+
+### Changed
+
+- Profile list format 2 (launch modes, experimental settings, per-profile
+  manual check). Files from 0.1.x are migrated automatically and the previous
+  file is kept as `metadata.json.v1.bak`; 0.1.x opens a format 2 file
+  read-only.
+- Claude Desktop default-profile texts now point to the experimental option
+  instead of saying separate profiles are impossible.
+
+### Security
+
+- Only `src/main/runtime/process-closer.ts` may ask another process to quit,
+  and it is reachable only from a confirmed Switch-mode launch. A source test
+  enforces this and that nothing anywhere force-kills (no SIGKILL, `/F`,
+  `pkill`, or `killall`).
+
 ## [0.1.0] - 2026-10-10
 
 First public preview.
@@ -47,5 +92,6 @@ First public preview.
   spawned process starts with only stdin, stdout, and stderr open, so no
   Electron descriptors leak into launched applications.
 
-[Unreleased]: https://github.com/FazelMan/profile-switcher/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/FazelMan/profile-switcher/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/FazelMan/profile-switcher/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/FazelMan/profile-switcher/releases/tag/v0.1.0

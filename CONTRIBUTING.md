@@ -35,17 +35,27 @@ Pull requests should:
   `docs/manual-test-plan.md` run on real installations.
 - Never store, read, copy, or log credentials, tokens, or cookies, and never
   build shell command strings from user input.
-- Add user-facing text to the locale catalog (`src/renderer/src/i18n/en.ts`)
-  rather than hard-coding it; main-process text goes through message or error
-  codes.
+- Add user-facing text to every locale catalog (`src/renderer/src/i18n/en.ts`
+  and `fa.ts`) rather than hard-coding it; main-process text goes through
+  message or error codes. Use logical CSS properties (`inline-start`/`end`) so
+  layouts mirror in right-to-left languages.
 - Update `CHANGELOG.md` under `## [Unreleased]`.
 
 ## Adding a language
 
-Add a catalog next to `src/renderer/src/i18n/en.ts` with the same shape
-(the `Catalog` type enforces completeness), register it in
-`src/renderer/src/i18n/index.tsx`, and add the language code to `LANGUAGES` in
-`src/shared/domain/settings.ts`.
+English (`en.ts`) and Persian (`fa.ts`) live in `src/renderer/src/i18n/`.
+To add a language:
+
+1. Add a catalog next to them typed as `Catalog` (the type checker enforces
+   every key), register it in `src/renderer/src/i18n/index.tsx`, and add the
+   code to `LANGUAGES` in `src/shared/domain/settings.ts` (and to
+   `RTL_LANGUAGES` if it is written right to left).
+2. Translate the native menu and dialog titles in `src/main/native-strings.ts`.
+3. Keep `{placeholders}` unchanged; `tests/component/i18n-catalogs.test.tsx`
+   checks keys and placeholders. Wrap inline code, options, and paths in
+   right-to-left text with `ltr()` as `fa.ts` does.
+4. If the script needs a font that systems often lack, bundle an
+   openly licensed one (as Vazirmatn is for Persian) and ship its license.
 
 ## Adding an application
 

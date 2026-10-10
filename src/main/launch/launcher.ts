@@ -87,6 +87,7 @@ export class Launcher {
   ): LaunchReport {
     return {
       launchId: context.launchId,
+      closedProfileIds: [],
       isolation: plan.isolation,
       notes: this.notes(plan, fields.method),
       ...fields,
@@ -98,6 +99,7 @@ export class Launcher {
       msg(method === 'terminal' ? 'launch.note.terminalOpened' : 'launch.note.processStarted'),
     ];
     if (plan.isolation === 'shared') notes.push(msg('launch.note.sharedLaunch'));
+    if (plan.isolation === 'experimental') notes.push(msg('launch.note.experimentalLaunch'));
     notes.push(msg('launch.note.notProofOfSignIn'));
     return notes;
   }
@@ -238,31 +240,43 @@ export class Launcher {
     plan: DesktopLaunchPlan,
     context: LaunchContext,
   ): Promise<LaunchReport> {
-    if (UNSAFE_ARG.test(plan.target)) throw new AppFailure('EXECUTABLE_INVALID');
+    if ([plan.target, ...plan.args].some((value) => UNSAFE_ARG.test(value)))
+      throw new AppFailure('EXECUTABLE_INVALID');
+    if (plan.marker !== null && plan.args.at(-1) !== plan.marker)
+      throw new AppFailure('INTERNAL_ERROR', undefined, 'launch marker must be the last argument');
     const { platform } = this.system;
     if (platform === 'darwin') {
-      // `open` hands off to LaunchServices; the resulting app PID is not known.
-      await this.runOpen(['-a', plan.target]);
+      // `open` hands off to LaunchServices, so the app is attributed to itself
+      // (not to Profile Switcher) for permission prompts, and its PID is not
+      // returned. `-n` starts a separate instance for a profile with its own
+      // folder; an ordinary launch focuses the running app instead.
+      await this.runOpen(
+        plan.args.length > 0
+          ? ['-n', '-a', plan.target, '--args', ...plan.args]
+          : ['-a', plan.target],
+      );
       this.logger.info('launch.started', { method: 'direct', isolation: plan.isolation });
       return this.report(plan, context, {
         method: 'direct',
         terminal: null,
         pid: null,
-        tracking: 'none',
+        tracking: plan.marker ? 'marker' : 'none',
       });
     }
     if (platform === 'win32') {
-      const { pid } = await this.system.spawner.spawnDetached(plan.target, [], {
+      // With a marker the main process is found by its final argument: the
+      // started executable may be a launcher stub that exits right away.
+      const { pid } = await this.system.spawner.spawnDetached(plan.target, plan.args, {
         env: cloneEnv(this.system.env),
         cwd: pathApiFor('win32').dirname(plan.target),
-        ...(context.onExit ? { onExit: context.onExit } : {}),
+        ...(context.onExit && !plan.marker ? { onExit: context.onExit } : {}),
       });
       this.logger.info('launch.started', { method: 'direct', isolation: plan.isolation });
       return this.report(plan, context, {
         method: 'direct',
         terminal: null,
-        pid,
-        tracking: pid === null ? 'none' : 'child',
+        pid: plan.marker ? null : pid,
+        tracking: plan.marker ? 'marker' : pid === null ? 'none' : 'child',
       });
     }
     throw new AppFailure('APP_UNSUPPORTED_PLATFORM');

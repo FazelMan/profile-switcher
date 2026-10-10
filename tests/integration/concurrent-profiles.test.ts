@@ -15,6 +15,7 @@ import { createDefaultRegistry } from '../../src/main/adapters/registry';
 import { Launcher } from '../../src/main/launch/launcher';
 import { resolveAppPaths, type AppPaths } from '../../src/main/paths';
 import { ProfileService } from '../../src/main/profiles/profile-service';
+import { createNodeQuitRequester, ProcessCloser } from '../../src/main/runtime/process-closer';
 import { ProcessTracker } from '../../src/main/runtime/process-tracker';
 import { MetadataStore } from '../../src/main/storage/metadata-store';
 import { createNodeSystemContext, type SystemContext } from '../../src/main/system';
@@ -79,6 +80,11 @@ async function service() {
     paths,
     launcher: new Launcher(system, paths.launchersDir, nullLogger),
     tracker: new ProcessTracker(system, paths.runtimeDir, nullLogger),
+    closer: new ProcessCloser({
+      requestQuit: createNodeQuitRequester(system.platform, system.runner),
+      processes: system.processes,
+      logger: nullLogger,
+    }),
     logger: nullLogger,
     randomBytes: (n) => randomBytes(n),
     appInfo: {
@@ -284,5 +290,64 @@ describe.runIf(process.platform === 'linux')('concurrent profiles (real processe
     expect(running(await restarted.runtime(), id)).toEqual([
       expect.objectContaining({ pid: instance!.pid, configDirectory: 'verified' }),
     ]);
+  }, 60_000);
+
+  it('Switch mode closes the confirmed profile with a normal quit request, then launches the other', async () => {
+    const svc = await service();
+    await svc.updateSettings({ launchModes: { 'claude-code': 'switch' } });
+    const make = (name: string) =>
+      svc.create(
+        createProfileInputSchema.parse({
+          name,
+          appId: 'claude-code',
+          color: 'blue',
+          storage: { kind: 'managed' },
+        }),
+      );
+    const personal = await make('Personal');
+    const work = await make('Work');
+    const dirOf = async (id: string) =>
+      (await svc.snapshot()).profiles.find((p) => p.id === id)!.dataDirectory!;
+
+    await svc.launch(personal);
+    const [personalInstance] = await waitFor(async () => {
+      const list = running(await svc.runtime(), personal);
+      return list.length === 1 ? list : undefined;
+    }, 'Personal to run');
+    spawnedPids.add(personalInstance!.pid!);
+    await waitFor(
+      async () => ((await svc.verify(personal)).loggedIn ? true : undefined),
+      'Personal sign-in',
+    );
+    const personalBefore = hashDirectory(await dirOf(personal));
+
+    // Without a decision nothing happens: Personal keeps running, Work is not started.
+    const prompt = await svc.launch(work);
+    expect(prompt).toEqual({
+      kind: 'confirm-switch',
+      running: [
+        { profileId: personal, launchId: personalInstance!.launchId, pid: personalInstance!.pid },
+      ],
+      untrackedProfileIds: [],
+    });
+    expect(isAlive(personalInstance!.pid!)).toBe(true);
+    expect(running(await svc.runtime(), work)).toEqual([]);
+
+    // The user confirms: Personal is asked to quit (SIGTERM), exits, and Work starts.
+    const outcome = await svc.launch(work, {
+      switch: { action: 'close', launchIds: [personalInstance!.launchId] },
+    });
+    expect(outcome).toMatchObject({ kind: 'launched', report: { closedProfileIds: [personal] } });
+    expect(isAlive(personalInstance!.pid!)).toBe(false);
+    const [workInstance] = await waitFor(async () => {
+      const list = running(await svc.runtime(), work);
+      return list.length === 1 ? list : undefined;
+    }, 'Work to run');
+    spawnedPids.add(workInstance!.pid!);
+    expect(workInstance!.configDirectory).toBe('verified');
+
+    // Closing Personal did not change its folder: its sign-in is still there for next time.
+    expect(hashDirectory(await dirOf(personal))).toBe(personalBefore);
+    expect((await svc.verify(personal)).loggedIn).toBe(true);
   }, 60_000);
 });

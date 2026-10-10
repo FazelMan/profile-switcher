@@ -105,7 +105,13 @@ export const DEFAULT_LAUNCH_OPTIONS: LaunchOptions = {
 export const LAUNCH_METHODS = ['terminal', 'direct'] as const;
 export type LaunchMethod = (typeof LAUNCH_METHODS)[number];
 
-export const ISOLATION_LEVELS = ['isolated', 'shared'] as const;
+/**
+ * - `isolated`: a separate configuration through a mechanism the vendor documents.
+ * - `experimental`: a separate folder through undocumented application
+ *   behavior; whether accounts really stay apart is not guaranteed.
+ * - `shared`: the application's normal configuration.
+ */
+export const ISOLATION_LEVELS = ['isolated', 'experimental', 'shared'] as const;
 export type IsolationLevel = (typeof ISOLATION_LEVELS)[number];
 
 export const lastLaunchSchema = z
@@ -119,6 +125,20 @@ export const lastLaunchSchema = z
   .strict();
 export type LastLaunch = z.infer<typeof lastLaunchSchema>;
 
+/**
+ * The user's own record that they checked an experimental profile keeps its
+ * own sign-in (docs/manual-test-plan.md). It counts only while the
+ * application version is unchanged, and the UI presents it as the user's
+ * observation, not as a guarantee.
+ */
+export const manualCheckSchema = z
+  .object({
+    at: z.iso.datetime(),
+    appVersion: z.string().max(64).nullable(),
+  })
+  .strict();
+export type ManualCheck = z.infer<typeof manualCheckSchema>;
+
 export const profileSchema = z
   .object({
     id: profileIdSchema,
@@ -131,6 +151,7 @@ export const profileSchema = z
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     lastLaunch: lastLaunchSchema.nullable(),
+    manualCheck: manualCheckSchema.nullable(),
   })
   .strict();
 export type Profile = z.infer<typeof profileSchema>;
