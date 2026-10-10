@@ -72,6 +72,8 @@ or both side by side, with one click. Everything stays on your computer.
 | -------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------- |
 | Claude Code    | Isolated, concurrent profiles                              | Isolated, concurrent profiles                              | Isolated, concurrent profiles |
 | Claude Desktop | Shared launch; separate profiles **experimental** (opt-in) | Shared launch; separate profiles **experimental** (opt-in) | Not available                 |
+| Codex CLI      | Isolated, concurrent profiles                              | Isolated, concurrent profiles                              | Isolated, concurrent profiles |
+| Gemini CLI     | Isolated, concurrent profiles                              | Isolated, concurrent profiles                              | Isolated, concurrent profiles |
 
 - **Claude Code** isolation uses Anthropic's documented `CLAUDE_CONFIG_DIR`.
   With Claude Code 2.1.296 on Linux, this project confirmed that the CLI
@@ -92,9 +94,25 @@ or both side by side, with one click. Everything stays on your computer.
   Details; the record is tied to the installed Claude Desktop version. Profile
   Switcher never reads or changes anything inside the folder.
 
+- **Codex CLI** isolation uses `CODEX_HOME`, which OpenAI documents as the
+  folder for Codex's configuration and cached sign-in (`auth.json`, or an OS
+  keyring entry that Codex keys to that folder). **Verify** runs
+  `codex login status` for the profile.
+- **Gemini CLI** isolation uses `GEMINI_CLI_HOME`, which Google documents as
+  the root of Gemini CLI's user-level configuration and storage (a `.gemini`
+  folder inside it holds settings, history, and the Google sign-in). Gemini CLI
+  has no sign-in status command, so there is no **Verify**. If
+  `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true` is set, Gemini CLI uses one
+  keychain entry for every folder and profiles show **Needs verification**.
+- For both, variables that supply a key directly (`OPENAI_API_KEY`,
+  `CODEX_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`,
+  `GOOGLE_CLOUD_ACCESS_TOKEN`) are removed from launches by default. Both were
+  checked with the real CLIs (Codex CLI 0.162.1, Gemini CLI 0.63.0) on Linux;
+  real sign-ins and macOS/Windows are not yet verified by this project.
+
 Details, evidence, and what is not guaranteed: **[docs/compatibility.md](docs/compatibility.md)**.
-Future integrations (Codex CLI, Gemini CLI, Cursor, …) plug into the same
-adapter interface; see [docs/architecture.md](docs/architecture.md).
+Other tools (for example Cursor) plug into the same adapter interface; see
+[docs/architecture.md](docs/architecture.md).
 
 ## Configuration isolation vs. account isolation
 

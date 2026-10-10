@@ -127,6 +127,6 @@ describe('adapter registry', () => {
       createDefaultRegistry()
         .list()
         .map((a) => a.id),
-    ).toEqual(['claude-code', 'claude-desktop']);
+    ).toEqual(['claude-code', 'claude-desktop', 'codex-cli', 'gemini-cli']);
   });
 });

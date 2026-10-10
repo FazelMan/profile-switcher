@@ -20,14 +20,16 @@ in with.
 
 ## Matrix
 
-| Application    | OS                 | Isolation                                                                                                    | Concurrent profiles      | Launch                                                                     | "Running" detection                                                      | Running process's folder checked                                  |
-| -------------- | ------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Claude Code    | Linux x64          | **Supported** (documented; see evidence)                                                                     | **Supported**            | New terminal window, or copy command                                       | PID recorded by the launched shell + `/proc` identity                    | Yes (`/proc/<pid>/environ`)                                       |
-| Claude Code    | macOS (arm64, x64) | **Supported** (documented)                                                                                   | **Supported**            | New Terminal/iTerm window, or copy command                                 | PID recorded by the launched shell + `ps` identity                       | No (macOS hides it); set at launch                                |
-| Claude Code    | Windows x64        | **Supported** (documented)                                                                                   | **Supported**            | New console window, or copy command                                        | Native `claude.exe`: process handle. npm `claude.cmd`: not tracked       | No (Windows hides it); set at launch                              |
-| Claude Desktop | macOS, Windows     | **Unsupported** (default profile)                                                                            | **Unsupported**          | Shared launch, labeled "Open (shared)"                                     | macOS: not tracked. Windows: process handle                              | n/a                                                               |
-| Claude Desktop | macOS, Windows     | **Experimental, opt-in** (own folder; undocumented) — **Needs verification** until you record your own check | Possible, not guaranteed | `--user-data-dir=<folder>` as last argument (macOS: `open -n -a … --args`) | Main process found by its folder argument (`ps` / CIM), helpers excluded | Yes: the folder is read back from the main process's command line |
-| Claude Desktop | Linux              | **Unsupported** (no official build)                                                                          | **Unsupported**          | Not available                                                              | n/a                                                                      | n/a                                                               |
+| Application    | OS                    | Isolation                                                                                                    | Concurrent profiles      | Launch                                                                     | "Running" detection                                                      | Running process's folder checked                                  |
+| -------------- | --------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Claude Code    | Linux x64             | **Supported** (documented; see evidence)                                                                     | **Supported**            | New terminal window, or copy command                                       | PID recorded by the launched shell + `/proc` identity                    | Yes (`/proc/<pid>/environ`)                                       |
+| Claude Code    | macOS (arm64, x64)    | **Supported** (documented)                                                                                   | **Supported**            | New Terminal/iTerm window, or copy command                                 | PID recorded by the launched shell + `ps` identity                       | No (macOS hides it); set at launch                                |
+| Claude Code    | Windows x64           | **Supported** (documented)                                                                                   | **Supported**            | New console window, or copy command                                        | Native `claude.exe`: process handle. npm `claude.cmd`: not tracked       | No (Windows hides it); set at launch                              |
+| Claude Desktop | macOS, Windows        | **Unsupported** (default profile)                                                                            | **Unsupported**          | Shared launch, labeled "Open (shared)"                                     | macOS: not tracked. Windows: process handle                              | n/a                                                               |
+| Claude Desktop | macOS, Windows        | **Experimental, opt-in** (own folder; undocumented) — **Needs verification** until you record your own check | Possible, not guaranteed | `--user-data-dir=<folder>` as last argument (macOS: `open -n -a … --args`) | Main process found by its folder argument (`ps` / CIM), helpers excluded | Yes: the folder is read back from the main process's command line |
+| Claude Desktop | Linux                 | **Unsupported** (no official build)                                                                          | **Unsupported**          | Not available                                                              | n/a                                                                      | n/a                                                               |
+| Codex CLI      | macOS, Windows, Linux | **Supported** (documented; verified on Linux)                                                                | **Supported**            | New terminal window, or copy command                                       | Same as Claude Code (npm `codex.cmd` on Windows: not tracked)            | Linux: yes (`CODEX_HOME`)                                         |
+| Gemini CLI     | macOS, Windows, Linux | **Supported** (documented; verified on Linux)                                                                | **Supported**            | New terminal window, or copy command                                       | Same as Claude Code (npm `gemini.cmd` on Windows: not tracked)           | Linux: yes (`GEMINI_CLI_HOME`)                                    |
 
 "Documented" means the vendor documents the mechanism. Device verification
 status is listed below; macOS and Windows builds are compiled and unit-tested
@@ -166,6 +168,85 @@ or Claude Desktop's normal data, and never handles tokens.
 - Windows: `%LOCALAPPDATA%\AnthropicClaude\claude.exe`,
   `%LOCALAPPDATA%\Programs\Claude\Claude.exe`, `%ProgramFiles%\Claude\Claude.exe`.
   Microsoft Store (MSIX) installs are not detected.
+
+## Codex CLI
+
+### Mechanism
+
+Profile Switcher starts `codex` with `CODEX_HOME` set to the profile's folder.
+OpenAI's [Codex authentication documentation](https://developers.openai.com/codex/auth)
+states that Codex caches the sign-in either in `auth.json` under `CODEX_HOME`
+(default `~/.codex`) or in the OS credential store
+(`cli_auth_credentials_store = file | keyring | auto`). Codex's source
+(`codex-rs/login/src/auth/storage.rs`) keys the keyring entry (service
+"Codex Auth") to a SHA-256 of the canonical `CODEX_HOME` path, so each profile
+folder has its own entry.
+
+- `OPENAI_API_KEY` and `CODEX_API_KEY` are removed from launched profiles by
+  default (a profile can opt out and is then marked **Needs verification**).
+- **Verify** runs `codex login status` with the profile's exact launch
+  environment and shows whether Codex reports a sign-in and its method.
+  Codex does not report the folder it used; the result says so.
+- Codex refuses to start when `CODEX_HOME` does not exist; managed folders are
+  recreated before each launch.
+- Codex writes helper files into `CODEX_HOME` on every start, even for
+  `--version`. Detection therefore reads the version with `CODEX_HOME`
+  pointed at Profile Switcher's own scratch folder, never at `~/.codex`.
+
+### Not guaranteed
+
+- Project files (`AGENTS.md`, `.codex/`) apply to every profile that opens
+  them.
+- The browser sign-in returns to whichever Codex is waiting for it; sign in
+  to one profile at a time.
+- Plans and organization access come from the signed-in account.
+
+### Evidence
+
+| Check                                                                                                                                                                                                                        | Environment                                                               | Result                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
+| A sign-in made with one `CODEX_HOME` (`codex login --with-api-key`, test key) is reported by `codex login status` for that folder and **not** for another; `auth.json` is written only in that folder; nothing under `$HOME` | Codex CLI 0.162.1, Linux x64                                              | Confirmed                                        |
+| `OPENAI_API_KEY` / `CODEX_API_KEY` in the environment do not change `codex login status`                                                                                                                                     | same                                                                      | Confirmed (they are still removed from launches) |
+| Two profiles run concurrently with their own `CODEX_HOME` and no key variable                                                                                                                                                | Linux, stand-in `codex` (`tests/integration/concurrent-profiles.test.ts`) | Passing                                          |
+| ChatGPT browser sign-in for two real accounts; keyring storage on macOS/Windows                                                                                                                                              | —                                                                         | **Not verified yet**                             |
+
+## Gemini CLI
+
+### Mechanism
+
+Profile Switcher starts `gemini` with `GEMINI_CLI_HOME` set to the profile's
+folder. Google's [configuration reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/configuration.md)
+describes `GEMINI_CLI_HOME` as "the root directory for Gemini CLI's
+user-level configuration and storage … The CLI will create a `.gemini` folder
+inside this directory", useful for "keeping CLI state isolated". In Gemini CLI
+0.63.0 the Google sign-in is cached in `<folder>/.gemini/oauth_creds.json`.
+
+- `GEMINI_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_CLOUD_ACCESS_TOKEN` are
+  removed from launched profiles by default.
+- `GOOGLE_GENAI_USE_VERTEXAI=true`, `GOOGLE_APPLICATION_CREDENTIALS`, and
+  `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true` mark profiles **Needs
+  verification**: the first two authenticate through Google Cloud instead of
+  the profile's sign-in, and with the third Gemini CLI stores the sign-in under
+  one fixed keychain entry (`gemini-cli-oauth` / `main-account`) shared by
+  every folder (from its source).
+- There is no **Verify**: Gemini CLI has no command that reports its sign-in.
+- Gemini CLI writes files into its folder even for `--version`; detection uses
+  Profile Switcher's scratch folder, as for Codex.
+
+### Not guaranteed
+
+- Project files (`GEMINI.md`, `.gemini/`, including a project `.gemini/.env`
+  that may set an API key) apply to every profile.
+- Plans and organization access come from the signed-in account.
+
+### Evidence
+
+| Check                                                                                                       | Environment                                                                      | Result                          |
+| ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------- |
+| With `GEMINI_CLI_HOME` set, user-level files are created under `<folder>/.gemini` and nothing under `$HOME` | Gemini CLI 0.63.0, Linux x64                                                     | Confirmed                       |
+| Sign-in file path follows `GEMINI_CLI_HOME`; encrypted storage uses a fixed keychain entry                  | Gemini CLI 0.63.0 source (`Storage.getOAuthCredsPath`, `OAuthCredentialStorage`) | Confirmed by reading the source |
+| Two profiles run concurrently with their own `GEMINI_CLI_HOME` and no key variable                          | Linux, stand-in `gemini`                                                         | Passing                         |
+| Google sign-in for two real accounts; macOS/Windows                                                         | —                                                                                | **Not verified yet**            |
 
 ## Launch modes
 

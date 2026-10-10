@@ -8,9 +8,13 @@ import type { Message } from '@shared/domain/messages';
 import type { IsolationLevel, Profile, StorageKind } from '@shared/domain/profile';
 import type { ExperimentalFeature, ExperimentalSettings } from '@shared/domain/settings';
 import type { VerificationReport } from '@shared/ipc';
-import type { EnvChanges } from '../launch/environment';
+import type { EnvChanges, EnvSwitch } from '../launch/environment';
 import type { SupportedPlatform } from '../platform';
 import type { SystemContext } from '../system';
+
+export interface DetectContext {
+  scratchDir: string | null;
+}
 
 /** Filesystem state of a profile's directories, gathered before evaluation. */
 export interface ProfileFsState {
@@ -94,11 +98,19 @@ export interface AppAdapter {
   readonly supportsVerification: boolean;
   readonly supportsCopyCommand: boolean;
   readonly experimental?: ExperimentalIsolation;
+  /** Variables that supply a credential and are removed from launches by default. */
+  readonly credentialVariables?: readonly string[];
+  /** Variables that switch the application to another provider or credential store. */
+  readonly providerVariables?: readonly EnvSwitch[];
 
   /** The application's own default configuration locations. Custom profile directories may not overlap these. */
   reservedDirectories(system: SystemContext): string[];
 
-  detect(system: SystemContext): Promise<DetectionResult>;
+  /**
+   * `scratchDir` is an empty folder owned by Profile Switcher, for tools
+   * that write files even when only asked for their version.
+   */
+  detect(system: SystemContext, context?: DetectContext): Promise<DetectionResult>;
 
   evaluate(input: EvaluationInput): CompatibilityReport;
 

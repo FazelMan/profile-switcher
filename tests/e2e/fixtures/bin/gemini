@@ -1,0 +1,19 @@
+#!/bin/sh
+# Stand-in for the Gemini CLI used by automated tests. It never contacts any
+# service. Like the real CLI it keeps user-level state in
+# ${GEMINI_CLI_HOME:-$HOME}/.gemini.
+root="${GEMINI_CLI_HOME:-$HOME}/.gemini"
+case "$1" in
+  --version) echo "0.63.0"; exit 0 ;;
+esac
+if [ -n "$PS_E2E_RECORD_FILE" ]; then
+  if [ -n "$GEMINI_API_KEY" ]; then api_key=true; else api_key=false; fi
+  printf '{"pid":%s,"configDir":"%s","apiKeyPresent":%s,"cwd":"%s"}\n' "$$" "${GEMINI_CLI_HOME:-}" "$api_key" "$(pwd)" >> "$PS_E2E_RECORD_FILE"
+fi
+if [ -n "$PS_FAKE_CLAUDE_HOLD" ] && [ -n "$GEMINI_CLI_HOME" ]; then
+  mkdir -p "$root"
+  printf '{"access_token":"fake"}\n' > "$root/oauth_creds.json"
+  i=0
+  while [ "$i" -lt 1200 ] && [ ! -e "$GEMINI_CLI_HOME/.fake-stop" ]; do sleep 0.25; i=$((i + 1)); done
+fi
+exit 0

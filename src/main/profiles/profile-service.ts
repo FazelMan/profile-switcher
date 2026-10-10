@@ -31,11 +31,7 @@ import type { AdapterRegistry } from '../adapters/registry';
 import type { AppAdapter, ProfileFsState } from '../adapters/types';
 import type { Logger } from '../diagnostics/logger';
 import { buildCopyCommand } from '../launch/commands';
-import {
-  activeProviderVariables,
-  CLAUDE_CREDENTIAL_OVERRIDE_VARS,
-  presentVariables,
-} from '../launch/environment';
+import { activeVariables, presentVariables } from '../launch/environment';
 import type { Launcher } from '../launch/launcher';
 import { terminalIdsFor } from '../launch/terminals';
 import { UnsafeValueError } from '../launch/quoting';
@@ -122,7 +118,8 @@ export class ProfileService {
         const results = await Promise.all(
           this.deps.registry.list().map(async (adapter) => {
             try {
-              return [adapter.id, await adapter.detect(this.deps.system)] as const;
+              const scratchDir = await this.scratchDirFor(adapter.id);
+              return [adapter.id, await adapter.detect(this.deps.system, { scratchDir })] as const;
             } catch (error) {
               this.deps.logger.error('detection.failed', { app: adapter.id, error });
               const failed: DetectionResult = {
@@ -152,6 +149,24 @@ export class ProfileService {
     await this.detectionInFlight;
   }
 
+  /**
+   * An empty folder owned by Profile Switcher for tools that write files even
+   * when only asked for their version. Null if it cannot be created.
+   */
+  private async scratchDirFor(appId: string): Promise<string | null> {
+    const dir = pathApiFor(this.deps.system.platform).join(
+      this.deps.paths.runtimeDir,
+      'probe',
+      appId,
+    );
+    try {
+      await createPrivateDirectory(dir);
+      return dir;
+    } catch {
+      return null;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Queries
 
@@ -159,15 +174,22 @@ export class ProfileService {
     const doc = this.deps.store.current();
     const profiles = await Promise.all(doc.profiles.map((profile) => this.view(profile)));
     const { system } = this.deps;
+    const adapters = this.deps.registry.list();
     const environment: EnvironmentSummary = {
       platform: isSupportedPlatform(system.platform) ? system.platform : 'other',
       arch: system.arch,
       credentialOverrideVariables: presentVariables(
         system.env,
-        CLAUDE_CREDENTIAL_OVERRIDE_VARS,
+        [...new Set(adapters.flatMap((adapter) => adapter.credentialVariables ?? []))],
         system.platform,
       ),
-      providerOverrideVariables: activeProviderVariables(system.env, system.platform),
+      providerOverrideVariables: [
+        ...new Set(
+          adapters.flatMap((adapter) =>
+            activeVariables(system.env, adapter.providerVariables ?? [], system.platform),
+          ),
+        ),
+      ],
       terminals: terminalIdsFor(system.platform),
     };
     return {

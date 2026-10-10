@@ -92,6 +92,45 @@ const messages: Record<MessageCode, string> = {
     'Sign in to one profile at a time: close the other Claude Desktop profiles while you sign in.',
   'compat.claudeDesktop.experimental.guidance.check':
     'After signing in to each profile, quit and reopen them, confirm each shows its own account, then record your check in Details.',
+  'compat.cli.isolated.summary':
+    'Separate configuration folder via {variable}, documented by the vendor. Detected {app} {version}.',
+  'compat.cli.isolated.guarantee.configDir':
+    "{app} reads and writes its settings, history, and stored sign-in in this profile's own folder ({variable}).",
+  'compat.cli.isolated.guarantee.concurrent':
+    'Profiles can run at the same time, each {app} process using only its own folder. Launching one never modifies another; it is closed only in Switch mode, after you confirm.',
+  'compat.cli.limitation.projectFiles':
+    'Project files in your repositories ({files}) apply to every profile that opens them.',
+  'compat.cli.limitation.entitlements':
+    'Subscription, plan limits, and organization membership come from the account you sign in with — not from the profile.',
+  'compat.cli.limitation.credentialEnvInherited':
+    "This profile passes credential variables through to {app}. They take precedence over the profile's own sign-in.",
+  'compat.cli.shared.summary': "Uses {app}'s default configuration. Not isolated.",
+  'compat.cli.shared.limitation':
+    'Settings, history, and sign-in are shared with every other use of {app} that does not set {variable}.',
+  'compat.cli.versionUnknown.summary':
+    '{app} was found, but its version could not be read. Check this profile before relying on isolation.',
+  'compat.cli.needsVerification.credentialEnv':
+    "Credential variables ({variables}) are passed through and override this profile's sign-in.",
+  'compat.cli.needsVerification.providerEnv':
+    "Provider or credential-storage variables ({variables}) are active, so this profile's own sign-in may not apply.",
+  'compat.cli.guidance.install': 'Install {app}, then refresh detection.',
+  'compat.cli.guidance.verify': 'Use Verify to ask {app} whether this profile is signed in.',
+  'compat.cli.guidance.unsetProviderEnv':
+    'Remove those variables from your environment if you want per-profile sign-in.',
+  'compat.codexCli.guarantee.credentials':
+    "A ChatGPT or API-key sign-in made in this profile is stored for this folder only: in auth.json inside it, or in the OS keyring under an entry derived from this folder's path.",
+  'compat.codexCli.guidance.signIn':
+    'Launch the profile and sign in when Codex asks (or run codex login in it). Each profile signs in separately.',
+  'compat.codexCli.limitation.signInPort':
+    'The browser sign-in returns to whichever Codex is waiting for it, so sign in to one profile at a time.',
+  'compat.geminiCli.guarantee.credentials':
+    "A Google sign-in made in this profile is stored in this folder (.gemini/oauth_creds.json), together with the profile's settings and history.",
+  'compat.geminiCli.guidance.signIn':
+    'Launch the profile and choose a sign-in method when Gemini CLI asks (or use /auth). Each profile signs in separately.',
+  'compat.geminiCli.limitation.encryptedStorage':
+    'If GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true is set, Gemini CLI keeps the sign-in in one OS keychain entry shared by all profiles; profiles are then marked Needs verification.',
+  'compat.geminiCli.limitation.noStatus':
+    'Gemini CLI has no command that reports its sign-in, so Profile Switcher cannot verify which account a profile uses. Check it inside Gemini CLI.',
   'compat.appNotFound.summary': '{app} was not found on this computer.',
   'compat.unknownApp.summary':
     'This profile targets an application ("{app}") that this version of Profile Switcher does not support.',
@@ -108,6 +147,8 @@ const messages: Record<MessageCode, string> = {
   'mechanism.claudeCode': 'CLAUDE_CONFIG_DIR (documented by Anthropic)',
   'mechanism.claudeDesktop': 'No documented mechanism',
   'mechanism.claudeDesktop.experimental': '--user-data-dir (undocumented · experimental)',
+  'mechanism.codexCli': 'CODEX_HOME (documented by OpenAI)',
+  'mechanism.geminiCli': 'GEMINI_CLI_HOME (documented by Google)',
   'launch.note.terminalOpened': 'A terminal window was opened for this profile.',
   'launch.note.processStarted': 'The application process was started.',
   'launch.note.sharedLaunch': "This launch uses the application's shared sign-in.",
@@ -453,6 +494,8 @@ export const en = {
       verifiedFolderMatch:
         'The application reports this profile’s folder. Configuration isolation confirmed.',
       verifiedFolderMismatch: 'The application reports a different folder: {folder}',
+      verifiedFolderNotReported:
+        "The application does not report which folder it uses. The sign-in state below is what it reports when started with this profile's folder.",
       signInLabel: 'Sign-in',
       signedIn: 'Signed in',
       signedOut: 'Not signed in',
@@ -627,7 +670,7 @@ export const en = {
       envWarning:
         'Profile Switcher was started with {variables} set. They are removed when launching profiles unless a profile opts in to passing them through.',
       providerWarning:
-        'Provider variables are active: {variables}. Per-profile sign-in may not apply to Claude Code.',
+        'Provider or credential-storage variables are active: {variables}. Per-profile sign-in may not apply to the applications that use them.',
     },
     errorBoundary: {
       title: 'The interface hit an unexpected error',

@@ -74,17 +74,48 @@ export function presentVariables(
   });
 }
 
+/**
+ * A variable whose presence changes how an application authenticates.
+ * `non-empty`: any non-empty value counts; `truthy`: any value except empty,
+ * "0", or "false"; `true`: only the literal "true" (case-insensitive).
+ */
+export interface EnvSwitch {
+  name: string;
+  active: 'non-empty' | 'truthy' | 'true';
+}
+
+/** Names of the switches that are active in `env`. Values are never returned. */
+export function activeVariables(
+  env: Readonly<Record<string, string | undefined>>,
+  switches: readonly EnvSwitch[],
+  platform: NodeJS.Platform,
+): string[] {
+  const map = cloneEnv(env);
+  return switches
+    .filter(({ name, active }) => {
+      const key = findKey(map, name, platform === 'win32');
+      if (key === undefined) return false;
+      const value = map[key] ?? '';
+      if (active === 'non-empty') return value !== '';
+      if (active === 'true') return value.trim().toLowerCase() === 'true';
+      return isTruthyEnv(value);
+    })
+    .map(({ name }) => name);
+}
+
+export const CLAUDE_PROVIDER_SWITCHES: readonly EnvSwitch[] = CLAUDE_PROVIDER_OVERRIDE_VARS.map(
+  (name) => ({
+    name,
+    active: name === 'ANTHROPIC_FEDERATION_RULE_ID' ? ('non-empty' as const) : ('truthy' as const),
+  }),
+);
+
 /** Provider variables that are actually enabled (e.g. CLAUDE_CODE_USE_BEDROCK=1). */
 export function activeProviderVariables(
   env: Readonly<Record<string, string | undefined>>,
   platform: NodeJS.Platform,
 ): string[] {
-  const map = cloneEnv(env);
-  return CLAUDE_PROVIDER_OVERRIDE_VARS.filter((name) => {
-    const key = findKey(map, name, platform === 'win32');
-    if (key === undefined) return false;
-    return name === 'ANTHROPIC_FEDERATION_RULE_ID' ? map[key] !== '' : isTruthyEnv(map[key]);
-  });
+  return activeVariables(env, CLAUDE_PROVIDER_SWITCHES, platform);
 }
 
 export function applyEnvChanges(

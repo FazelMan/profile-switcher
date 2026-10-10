@@ -7,6 +7,7 @@ import {
   activeProviderVariables,
   applyEnvChanges,
   CLAUDE_CREDENTIAL_OVERRIDE_VARS,
+  CLAUDE_PROVIDER_SWITCHES,
   presentVariables,
   type EnvChanges,
 } from '../launch/environment';
@@ -110,6 +111,8 @@ export class ClaudeCodeAdapter implements AppAdapter {
   readonly supportsWorkingDirectory = true;
   readonly supportsVerification = true;
   readonly supportsCopyCommand = true;
+  readonly credentialVariables = CLAUDE_CREDENTIAL_OVERRIDE_VARS;
+  readonly providerVariables = CLAUDE_PROVIDER_SWITCHES;
 
   reservedDirectories(system: SystemContext): string[] {
     return [claudeCodeDefaultConfigDir(system)];

@@ -110,6 +110,20 @@ feature stays experimental as long as Anthropic does not document it.
 | 3a.4 | Close Work. Launch Work again and choose **Close and open "Work"**. | macOS/Linux: Personal's Claude Code exits (its terminal shows the process ended), then Work starts. Personal's sign-in is kept for next time. |
 | 3a.5 | Windows only: repeat 3a.4.                                          | Windows cannot ask a console program to quit: the error says Personal did not close, and Work is not opened. Close it yourself.               |
 
+## 3c. Codex CLI and Gemini CLI (every OS)
+
+Use two accounts per tool. Repeat for Codex CLI and Gemini CLI.
+
+| #    | Step                                                                                   | Expected result                                                                   |
+| ---- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 3c.1 | Create **Personal** and **Work** profiles for the tool.                                | Both show **Supported** and the mechanism (`CODEX_HOME` / `GEMINI_CLI_HOME`).     |
+| 3c.2 | Launch Personal; sign in (Codex: ChatGPT or `codex login`; Gemini: Login with Google). | Sign-in completes in that terminal.                                               |
+| 3c.3 | Launch Work without closing Personal; sign in with the other account.                  | Both run. Personal is still signed in to its own account.                         |
+| 3c.4 | Codex only: **Verify** each profile.                                                   | Each reports "Signed in" and its method.                                          |
+| 3c.5 | Check `~/.codex` / `~/.gemini`.                                                        | Not created or changed by these launches.                                         |
+| 3c.6 | Quit both, relaunch each.                                                              | Each is still signed in to its own account.                                       |
+| 3c.7 | Gemini only: set `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true`, restart Profile Switcher. | Gemini profiles show **Needs verification** with the shared-keychain explanation. |
+
 ## 3b. Persian interface
 
 | #    | Step                                                                             | Expected result                                                                                    |

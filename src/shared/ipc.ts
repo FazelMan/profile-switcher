@@ -136,7 +136,8 @@ export interface VerificationReport {
   appVersion: string | null;
   expectedConfigDirectory: string;
   reportedConfigDirectory: string | null;
-  configDirectoryMatches: boolean;
+  /** Null when the application does not report which folder it used. */
+  configDirectoryMatches: boolean | null;
   /** Null when the application did not report sign-in state. */
   loggedIn: boolean | null;
   authMethod: string | null;

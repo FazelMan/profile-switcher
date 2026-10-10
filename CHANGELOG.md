@@ -7,6 +7,20 @@ section matching the pushed tag as the GitHub Release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **Codex CLI** profiles: each profile runs `codex` with its own `CODEX_HOME`
+  (configuration and sign-in, in `auth.json` or a keyring entry keyed to that
+  folder). `OPENAI_API_KEY` and `CODEX_API_KEY` are removed from launches by
+  default. **Verify** runs `codex login status`.
+- **Gemini CLI** profiles: each profile runs `gemini` with its own
+  `GEMINI_CLI_HOME` (settings, history, and Google sign-in in its `.gemini`
+  folder). `GEMINI_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_CLOUD_ACCESS_TOKEN`
+  are removed by default; Vertex AI, service-account credentials, and
+  `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true` mark profiles Needs verification.
+- Verification results can say that an application does not report its
+  folder.
+
 ## [0.2.0] - 2026-10-10
 
 ### Added

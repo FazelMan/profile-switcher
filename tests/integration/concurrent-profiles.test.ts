@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -350,4 +351,74 @@ describe.runIf(process.platform === 'linux')('concurrent profiles (real processe
     expect(hashDirectory(await dirOf(personal))).toBe(personalBefore);
     expect((await svc.verify(personal)).loggedIn).toBe(true);
   }, 60_000);
+
+  it.each([
+    {
+      appId: 'codex-cli',
+      variable: 'CODEX_HOME',
+      credential: 'OPENAI_API_KEY',
+      signIn: 'auth.json',
+    },
+    {
+      appId: 'gemini-cli',
+      variable: 'GEMINI_CLI_HOME',
+      credential: 'GEMINI_API_KEY',
+      signIn: '.gemini/oauth_creds.json',
+    },
+  ])(
+    '$appId: two profiles run side by side, each with only its own folder',
+    async ({ appId, variable, credential, signIn }) => {
+      system = { ...system, env: { ...system.env, [credential]: 'must-not-reach-profiles' } };
+      const svc = await service();
+      const make = (name: string) =>
+        svc.create(
+          createProfileInputSchema.parse({
+            name,
+            appId,
+            color: 'blue',
+            storage: { kind: 'managed' },
+          }),
+        );
+      const personal = await make('Personal');
+      const work = await make('Work');
+      const snapshot = await svc.snapshot();
+      expect(snapshot.profiles.every((p) => p.compatibility.state === 'Supported')).toBe(true);
+      const dirOf = (id: string) => snapshot.profiles.find((p) => p.id === id)!.dataDirectory!;
+
+      await svc.launch(personal);
+      await svc.launch(work);
+      for (const id of [personal, work]) {
+        const [instance] = await waitFor(async () => {
+          const list = running(await svc.runtime(), id);
+          return list.length === 1 ? list : undefined;
+        }, `${id} to run`);
+        spawnedPids.add(instance!.pid!);
+        expect(instance!.configDirectory).toBe('verified');
+        const environ = readFileSync(`/proc/${instance!.pid}/environ`, 'utf8').split('\0');
+        expect(environ).toContain(`${variable}=${dirOf(id)}`);
+        expect(environ.some((entry) => entry.startsWith(`${credential}=`))).toBe(false);
+        // The stand-in "signs in" inside its own folder only.
+        await waitFor(
+          async () => (existsSync(path.join(dirOf(id), signIn)) ? true : undefined),
+          `${id} sign-in`,
+        );
+      }
+      expect(existsSync(path.join(system.homeDir, '.codex'))).toBe(false);
+      expect(existsSync(path.join(system.homeDir, '.gemini'))).toBe(false);
+
+      if (appId === 'codex-cli') {
+        expect(await svc.verify(personal)).toMatchObject({
+          loggedIn: true,
+          authMethod: 'ChatGPT',
+          configDirectoryMatches: null,
+        });
+      }
+      for (const id of [personal, work]) writeFileSync(path.join(dirOf(id), '.fake-stop'), '');
+      await waitFor(
+        async () => (Object.keys(await svc.runtime()).length === 0 ? true : undefined),
+        'both to exit',
+      );
+    },
+    60_000,
+  );
 });

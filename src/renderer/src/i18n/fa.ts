@@ -84,6 +84,40 @@ const messages: Record<MessageCode, string> = {
     'هر بار فقط در یک پروفایل وارد شوید: هنگام ورود، پروفایل‌های دیگر Claude Desktop را ببندید.',
   'compat.claudeDesktop.experimental.guidance.check':
     'پس از ورود به هر پروفایل، آن‌ها را ببندید و دوباره باز کنید، مطمئن شوید هرکدام حساب خودش را نشان می‌دهد و سپس بررسی خود را در «جزئیات» ثبت کنید.',
+  'compat.cli.isolated.summary':
+    'پوشهٔ پیکربندی جداگانه با {variable} که سازنده آن را مستند کرده است. {app} نسخهٔ {version} شناسایی شد.',
+  'compat.cli.isolated.guarantee.configDir':
+    '{app} تنظیمات، تاریخچه و ورود ذخیره‌شده‌اش را در پوشهٔ خود همین پروفایل ({variable}) می‌خواند و می‌نویسد.',
+  'compat.cli.isolated.guarantee.concurrent':
+    'پروفایل‌ها می‌توانند همزمان اجرا شوند و هر فرایند {app} فقط از پوشهٔ خودش استفاده می‌کند. اجرای یک پروفایل هیچ‌وقت پروفایل دیگری را تغییر نمی‌دهد؛ فقط در حالت جابه‌جایی و پس از تأیید شما بسته می‌شود.',
+  'compat.cli.limitation.projectFiles':
+    'فایل‌های پروژه در مخزن‌های شما ({files}) برای هر پروفایلی که آن‌ها را باز کند اعمال می‌شوند.',
+  'compat.cli.limitation.entitlements':
+    'اشتراک، محدودیت‌های طرح و عضویت در سازمان از حسابی می‌آید که با آن وارد می‌شوید، نه از پروفایل.',
+  'compat.cli.limitation.credentialEnvInherited':
+    'این پروفایل متغیرهای اعتبارنامه را به {app} می‌دهد. این متغیرها بر ورود خود پروفایل اولویت دارند.',
+  'compat.cli.shared.summary': 'از پیکربندی پیش‌فرض {app} استفاده می‌کند. مجزا نیست.',
+  'compat.cli.shared.limitation':
+    'تنظیمات، تاریخچه و ورود با هر استفادهٔ دیگری از {app} که {variable} را تنظیم نمی‌کند مشترک است.',
+  'compat.cli.versionUnknown.summary':
+    '{app} پیدا شد، اما نسخهٔ آن خوانده نشد. پیش از تکیه بر جداسازی، این پروفایل را بررسی کنید.',
+  'compat.cli.needsVerification.credentialEnv':
+    'متغیرهای اعتبارنامه ({variables}) عبور داده می‌شوند و بر ورود این پروفایل اولویت دارند.',
+  'compat.cli.needsVerification.providerEnv':
+    'متغیرهای ارائه‌دهنده یا محل ذخیرهٔ اعتبارنامه ({variables}) فعال‌اند، بنابراین ممکن است ورود مخصوص این پروفایل اعمال نشود.',
+  'compat.cli.guidance.install': '{app} را نصب کنید و سپس شناسایی را تازه کنید.',
+  'compat.cli.guidance.verify': 'با «بررسی» از {app} بپرسید که آیا این پروفایل وارد شده است.',
+  'compat.cli.guidance.unsetProviderEnv':
+    'اگر ورود جداگانه برای هر پروفایل می‌خواهید، این متغیرها را از محیط خود حذف کنید.',
+  'compat.codexCli.guarantee.credentials': `ورودی که در این پروفایل با ChatGPT یا کلید API انجام شود فقط برای همین پوشه ذخیره می‌شود: در ${ltr('auth.json')} داخل آن، یا در keyring سیستم زیر موردی که از مسیر همین پوشه ساخته می‌شود.`,
+  'compat.codexCli.guidance.signIn': `پروفایل را اجرا کنید و وقتی Codex خواست وارد شوید (یا داخل آن ${ltr('codex login')} را اجرا کنید). هر پروفایل جداگانه وارد می‌شود.`,
+  'compat.codexCli.limitation.signInPort':
+    'ورود از مرورگر به هر Codexی برمی‌گردد که منتظر آن است، پس هر بار فقط در یک پروفایل وارد شوید.',
+  'compat.geminiCli.guarantee.credentials': `ورود با حساب Google در این پروفایل، همراه با تنظیمات و تاریخچهٔ آن، در همین پوشه (${ltr('.gemini/oauth_creds.json')}) ذخیره می‌شود.`,
+  'compat.geminiCli.guidance.signIn': `پروفایل را اجرا کنید و وقتی Gemini CLI پرسید روش ورود را انتخاب کنید (یا از ${ltr('/auth')} استفاده کنید). هر پروفایل جداگانه وارد می‌شود.`,
+  'compat.geminiCli.limitation.encryptedStorage': `اگر ${ltr('GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true')} تنظیم شده باشد، Gemini CLI ورود را در یک مورد keychain سیستم نگه می‌دارد که بین همهٔ پروفایل‌ها مشترک است؛ در این حالت پروفایل‌ها «نیاز به بررسی» نشان داده می‌شوند.`,
+  'compat.geminiCli.limitation.noStatus':
+    'Gemini CLI فرمانی برای گزارش وضعیت ورود ندارد، پس Profile Switcher نمی‌تواند بررسی کند هر پروفایل از کدام حساب استفاده می‌کند. این را داخل Gemini CLI ببینید.',
   'compat.appNotFound.summary': '{app} روی این رایانه پیدا نشد.',
   'compat.unknownApp.summary':
     'این پروفایل برای برنامه‌ای («{app}») است که این نسخهٔ Profile Switcher از آن پشتیبانی نمی‌کند.',
@@ -100,6 +134,8 @@ const messages: Record<MessageCode, string> = {
   'mechanism.claudeCode': `${ltr('CLAUDE_CONFIG_DIR')} (مستندشده توسط Anthropic)`,
   'mechanism.claudeDesktop': 'روش مستندی وجود ندارد',
   'mechanism.claudeDesktop.experimental': `${ltr('--user-data-dir')} (مستندنشده · آزمایشی)`,
+  'mechanism.codexCli': `${ltr('CODEX_HOME')} (مستندشده توسط OpenAI)`,
+  'mechanism.geminiCli': `${ltr('GEMINI_CLI_HOME')} (مستندشده توسط Google)`,
   'launch.note.terminalOpened': 'یک پنجرهٔ ترمینال برای این پروفایل باز شد.',
   'launch.note.processStarted': 'فرایند برنامه اجرا شد.',
   'launch.note.sharedLaunch': 'این اجرا از ورود مشترک برنامه استفاده می‌کند.',
@@ -443,6 +479,8 @@ export const fa: Catalog = {
       verificationTitle: 'نتیجهٔ بررسی',
       verifiedFolderMatch: 'برنامه پوشهٔ همین پروفایل را گزارش می‌دهد. جداسازی پیکربندی تأیید شد.',
       verifiedFolderMismatch: 'برنامه پوشهٔ دیگری را گزارش می‌دهد: {folder}',
+      verifiedFolderNotReported:
+        'برنامه گزارش نمی‌دهد از کدام پوشه استفاده می‌کند. وضعیت ورود زیر همان چیزی است که برنامه هنگام اجرا با پوشهٔ این پروفایل گزارش می‌دهد.',
       signInLabel: 'ورود',
       signedIn: 'وارد شده',
       signedOut: 'وارد نشده',
@@ -619,7 +657,7 @@ export const fa: Catalog = {
       envWarning:
         'Profile Switcher با متغیرهای {variables} اجرا شده است. این متغیرها هنگام اجرای پروفایل‌ها حذف می‌شوند، مگر اینکه پروفایلی عبور دادن آن‌ها را روشن کرده باشد.',
       providerWarning:
-        'متغیرهای ارائه‌دهنده فعال‌اند: {variables}. ممکن است ورود جداگانهٔ هر پروفایل برای Claude Code اعمال نشود.',
+        'متغیرهای ارائه‌دهنده یا محل ذخیرهٔ اعتبارنامه فعال‌اند: {variables}. ممکن است ورود جداگانهٔ هر پروفایل برای برنامه‌هایی که از آن‌ها استفاده می‌کنند اعمال نشود.',
     },
     errorBoundary: {
       title: 'رابط کاربری با خطای پیش‌بینی‌نشده‌ای روبه‌رو شد',
