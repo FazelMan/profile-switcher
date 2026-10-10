@@ -1,12 +1,14 @@
 import { ClaudeCodeAdapter } from './claude-code';
 import { ClaudeDesktopAdapter } from './claude-desktop';
+import { createCodexCliAdapter } from './codex-cli';
+import { createGeminiCliAdapter } from './gemini-cli';
 import type { AppAdapter } from './types';
 
 /**
- * The adapter registry. To support another application (Codex CLI, Gemini
- * CLI, Cursor, …), implement `AppAdapter` in its own module, add locale
- * strings for its message codes, and register it here. Nothing else in the
- * main process or the renderer needs to change.
+ * The adapter registry. To support another application (for example
+ * Cursor), implement `AppAdapter` in its own module, add locale strings
+ * for its message codes, and register it here. Nothing else in the main
+ * process or the renderer needs to change.
  */
 export class AdapterRegistry {
   private readonly adapters: Map<string, AppAdapter>;
@@ -29,5 +31,10 @@ export class AdapterRegistry {
 }
 
 export function createDefaultRegistry(): AdapterRegistry {
-  return new AdapterRegistry([new ClaudeCodeAdapter(), new ClaudeDesktopAdapter()]);
+  return new AdapterRegistry([
+    new ClaudeCodeAdapter(),
+    new ClaudeDesktopAdapter(),
+    createCodexCliAdapter(),
+    createGeminiCliAdapter(),
+  ]);
 }

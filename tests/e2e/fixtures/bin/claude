@@ -33,6 +33,12 @@ if [ -n "$PS_E2E_RECORD_FILE" ]; then
   printf '{"pid":%s,"configDir":"%s","apiKeyPresent":%s,"cwd":"%s"}\n' "$$" "${CLAUDE_CONFIG_DIR:-}" "$api_key" "$(pwd)" >> "$PS_E2E_RECORD_FILE"
 fi
 
+# Simulated /login: open the sign-in page the way Claude Code does, with the
+# command in BROWSER (or nothing when it is unset).
+if [ -n "$PS_FAKE_OPEN_URL" ] && [ -n "$BROWSER" ]; then
+  "$BROWSER" "$PS_FAKE_OPEN_URL"
+fi
+
 if [ -n "$PS_FAKE_CLAUDE_HOLD" ] && [ -n "$CLAUDE_CONFIG_DIR" ]; then
   # Simulated sign-in: the account name is the profile folder's name prefix.
   name=$(basename "$CLAUDE_CONFIG_DIR" | cut -d- -f1)

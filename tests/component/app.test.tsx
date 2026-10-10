@@ -497,3 +497,72 @@ describe('Persian', () => {
     await waitFor(() => expect(document.documentElement.dir).toBe('ltr'));
   });
 });
+
+describe('Terminal and Desktop buttons', () => {
+  function withDesktop() {
+    const snapshot = makeSnapshot({ profiles: [makeProfile()] });
+    snapshot.apps = snapshot.apps.map((app) =>
+      app.desktopCompanion
+        ? { ...app, desktopCompanion: { ...app.desktopCompanion, available: true } }
+        : app,
+    );
+    return createFakeApi(snapshot);
+  }
+
+  it('offers both when Claude Desktop is installed and opens the chosen one', async () => {
+    const api = withDesktop();
+    const { user } = renderApp(api);
+    const card = await screen.findByTestId('profile-card');
+    const group = within(card).getByRole('group', { name: 'Open this profile in' });
+    await user.click(within(group).getByRole('button', { name: 'Terminal' }));
+    await waitFor(() => expect(api.launchProfile).toHaveBeenLastCalledWith('work-abc234', {}));
+    await user.click(within(group).getByRole('button', { name: 'Desktop' }));
+    await waitFor(() =>
+      expect(api.launchProfile).toHaveBeenLastCalledWith('work-abc234', { target: 'desktop' }),
+    );
+  });
+
+  it('asks before turning on the experimental option for Desktop', async () => {
+    const api = withDesktop();
+    api.launchProfile.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'EXPERIMENTAL_DISABLED', params: { app: 'Claude Desktop' } },
+    });
+    const { user } = renderApp(api);
+    const card = await screen.findByTestId('profile-card');
+    await user.click(within(card).getByRole('button', { name: 'Desktop' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Open "Work" in Claude Desktop?' });
+    expect(api.updateSettings).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: 'Turn on and open' }));
+    await waitFor(() =>
+      expect(api.updateSettings).toHaveBeenCalledWith({
+        experimental: { claudeDesktopIsolation: true },
+      }),
+    );
+    await waitFor(() =>
+      expect(api.launchProfile).toHaveBeenLastCalledWith('work-abc234', { target: 'desktop' }),
+    );
+  });
+
+  it('shows a single Launch button when Claude Desktop is not available', async () => {
+    renderApp(createFakeApi(makeSnapshot({ profiles: [makeProfile()] })));
+    const card = await screen.findByTestId('profile-card');
+    expect(within(card).getByRole('button', { name: 'Launch' })).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Desktop' })).not.toBeInTheDocument();
+  });
+});
+
+describe('sign-in browser setting', () => {
+  it('defaults to the default browser and can be changed', async () => {
+    const api = createFakeApi();
+    const { user } = renderApp(api);
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    const select = screen.getByLabelText('Sign-in browser');
+    expect(select).toHaveValue('auto');
+    expect(
+      within(select).getByRole('option', { name: 'Default browser (Google Chrome)' }),
+    ).toBeInTheDocument();
+    await user.selectOptions(select, 'firefox');
+    expect(api.updateSettings).toHaveBeenCalledWith({ signInBrowser: 'firefox' });
+  });
+});

@@ -1,0 +1,28 @@
+#!/bin/sh
+# Stand-in for the Codex CLI used by automated tests. It never contacts any
+# service. Like the real CLI it requires CODEX_HOME to exist when set, and
+# keeps its sign-in in $CODEX_HOME/auth.json.
+home="${CODEX_HOME:-$HOME/.codex}"
+if [ -n "$CODEX_HOME" ] && [ ! -d "$CODEX_HOME" ]; then
+  echo "Error loading configuration: CODEX_HOME points to \"$CODEX_HOME\", but that path does not exist" >&2
+  exit 1
+fi
+case "$1" in
+  --version) echo "codex-cli 0.162.1"; exit 0 ;;
+  login)
+    if [ "$2" = "status" ]; then
+      if [ -f "$home/auth.json" ]; then echo "Logged in using ChatGPT" >&2; exit 0; fi
+      echo "Not logged in" >&2; exit 1
+    fi
+    ;;
+esac
+if [ -n "$PS_E2E_RECORD_FILE" ]; then
+  if [ -n "$OPENAI_API_KEY" ]; then api_key=true; else api_key=false; fi
+  printf '{"pid":%s,"configDir":"%s","apiKeyPresent":%s,"cwd":"%s"}\n' "$$" "${CODEX_HOME:-}" "$api_key" "$(pwd)" >> "$PS_E2E_RECORD_FILE"
+fi
+if [ -n "$PS_FAKE_CLAUDE_HOLD" ] && [ -n "$CODEX_HOME" ]; then
+  printf '{"auth_mode":"chatgpt"}\n' > "$home/auth.json"
+  i=0
+  while [ "$i" -lt 1200 ] && [ ! -e "$home/.fake-stop" ]; do sleep 0.25; i=$((i + 1)); done
+fi
+exit 0

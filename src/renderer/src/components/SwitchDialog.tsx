@@ -23,7 +23,7 @@ export function SwitchDialog({
   profile: ProfileView;
   app: AppSummary | undefined;
   pending: PendingSwitch;
-  busy: 'launch' | 'switch' | null;
+  busy: 'launch' | 'desktop' | 'switch' | null;
   onResolve(choice: 'close' | 'keep'): void;
   onCancel(): void;
 }) {

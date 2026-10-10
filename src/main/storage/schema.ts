@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { nameKey, profileIdSchema, profileSchema } from '@shared/domain/profile';
 import { DEFAULT_SETTINGS, settingsSchema, type Settings } from '@shared/domain/settings';
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export const metadataDocumentSchema = z
   .object({
@@ -105,6 +105,14 @@ export const MIGRATIONS: MigrationTable = {
         : document.settings,
       profiles,
     };
+  },
+  /**
+   * 2 → 3 (Profile Switcher 0.3.0): sign-in links open in a separate browser
+   * profile per Profile Switcher profile (`signInBrowser: 'auto'`).
+   */
+  2: (document) => {
+    const settings = asRecord(document.settings);
+    return settings ? { ...document, settings: { signInBrowser: 'auto', ...settings } } : document;
   },
 };
 

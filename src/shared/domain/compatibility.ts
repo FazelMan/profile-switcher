@@ -90,5 +90,13 @@ export interface AppSummary {
   /** Shells the copy-command feature can target on this OS. */
   copyCommandShells: CommandShell[];
   experimental: ExperimentalSupport | null;
+  /** Sign-in links open in a separate browser profile per Profile Switcher profile. */
+  signInBrowser: boolean;
+  /**
+   * A desktop app that can be opened with this profile's account (Claude Code
+   * profiles → Claude Desktop). `available` is false when it is not installed
+   * or not offered on this OS.
+   */
+  desktopCompanion: { appId: string; displayName: string; available: boolean } | null;
   detection: DetectionResult;
 }

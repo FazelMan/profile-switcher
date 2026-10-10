@@ -8,6 +8,7 @@ import {
   THEMES,
   type Language,
   type SettingsPatch,
+  type SignInBrowserChoice,
   type TerminalId,
 } from '@shared/domain/settings';
 import type { LinkId } from '@shared/links';
@@ -129,6 +130,58 @@ export function SettingsView() {
             ))}
           </select>
         </div>
+        {snapshot.apps.some((app) => app.platformSupported && app.desktopCompanion !== null) && (
+          <div className="field">
+            <label htmlFor="settings-sign-in-browser">{ui.settings.signInBrowser}</label>
+            {environment.browsers.supported ? (
+              <>
+                <select
+                  id="settings-sign-in-browser"
+                  value={settings.signInBrowser}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    void update({ signInBrowser: event.target.value as SignInBrowserChoice })
+                  }
+                >
+                  <option value="auto">
+                    {environment.browsers.resolved && settings.signInBrowser === 'auto'
+                      ? format(ui.settings.signInBrowserAuto, {
+                          browser: environment.browsers.resolved.name,
+                        })
+                      : environment.browsers.installed.length > 0
+                        ? format(ui.settings.signInBrowserAuto, {
+                            browser:
+                              environment.browsers.installed.find(
+                                (b) => b.id === environment.browsers.defaultId,
+                              )?.name ??
+                              environment.browsers.installed[0]?.name ??
+                              '',
+                          })
+                        : ui.settings.signInBrowserAutoNone}
+                  </option>
+                  {environment.browsers.installed.map((browser) => (
+                    <option key={browser.id} value={browser.id}>
+                      {browser.name}
+                    </option>
+                  ))}
+                  <option value="off">{ui.settings.signInBrowserOff}</option>
+                </select>
+                <p className="field-help">{ui.settings.signInBrowserHelp}</p>
+                {settings.signInBrowser === 'auto' &&
+                  environment.browsers.resolved &&
+                  environment.browsers.defaultId === null && (
+                    <p className="field-help">
+                      {format(ui.settings.signInBrowserSafari, {
+                        browser: environment.browsers.resolved.name,
+                      })}
+                    </p>
+                  )}
+              </>
+            ) : (
+              <p className="field-help">{ui.settings.signInBrowserUnsupported}</p>
+            )}
+          </div>
+        )}
       </section>
 
       {multiProfileApps.length > 0 && (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BadgeCheck, ClipboardCopy, FolderOpen, Play, ShieldAlert, Undo2 } from 'lucide-react';
+import { BadgeCheck, ClipboardCopy, FolderOpen, ShieldAlert, Undo2 } from 'lucide-react';
 import type { CommandShell } from '@shared/domain/compatibility';
 import type { AppError } from '@shared/domain/errors';
 import type { Message } from '@shared/domain/messages';
@@ -12,7 +12,7 @@ import { ErrorPanel } from './ErrorPanel';
 import { Modal } from './Modal';
 import { InstanceList } from './RuntimeStatus';
 import { StatusBadge } from './StatusBadge';
-import { SwitchDialog } from './SwitchDialog';
+import { LaunchControls, LaunchDialogs } from './LaunchControls';
 
 function MessageList({
   title,
@@ -104,23 +104,25 @@ function VerificationResult({ report }: { report: VerificationReport }) {
         : ui.details.signedOut;
   return (
     <section
-      className={`verification ${report.configDirectoryMatches ? 'tone-ok' : 'tone-warn'}`}
+      className={`verification ${report.configDirectoryMatches === false ? 'tone-warn' : report.configDirectoryMatches ? 'tone-ok' : 'tone-info'}`}
       aria-live="polite"
     >
       <h3>
-        {report.configDirectoryMatches ? (
-          <BadgeCheck className="icon" aria-hidden="true" />
-        ) : (
+        {report.configDirectoryMatches === false ? (
           <ShieldAlert className="icon" aria-hidden="true" />
+        ) : (
+          <BadgeCheck className="icon" aria-hidden="true" />
         )}
         {ui.details.verificationTitle}
       </h3>
       <p>
-        {report.configDirectoryMatches
-          ? ui.details.verifiedFolderMatch
-          : format(ui.details.verifiedFolderMismatch, {
-              folder: report.reportedConfigDirectory ?? ui.common.unknown,
-            })}
+        {report.configDirectoryMatches === null
+          ? ui.details.verifiedFolderNotReported
+          : report.configDirectoryMatches
+            ? ui.details.verifiedFolderMatch
+            : format(ui.details.verifiedFolderMismatch, {
+                folder: report.reportedConfigDirectory ?? ui.common.unknown,
+              })}
       </p>
       <dl className="kv">
         <dt>{ui.details.signInLabel}</dt>
@@ -178,8 +180,8 @@ export function ProfileDetailsDialog({
   const { api, call, snapshot, runtime } = useController();
   const { ui, message, dateTime, relativeTime } = useI18n();
   const app = snapshot?.apps.find((a) => a.id === profile.appId);
-  const { busy, launch, copyCommand, pendingSwitch, resolveSwitch, cancelSwitch } =
-    useProfileActions(profile, app);
+  const actions = useProfileActions(profile, app);
+  const { busy, copyCommand } = actions;
   const [verifying, setVerifying] = useState(false);
   const [verification, setVerification] = useState<VerificationReport | null>(null);
   const [verifyError, setVerifyError] = useState<AppError | null>(null);
@@ -209,30 +211,11 @@ export function ProfileDetailsDialog({
           <Button variant="ghost" onClick={onClose}>
             {ui.common.close}
           </Button>
-          <Button
-            variant="primary"
-            icon={<Play className="icon" aria-hidden="true" />}
-            disabled={!compatibility.launch.available}
-            loading={busy === 'launch' || busy === 'switch'}
-            onClick={() => void launch()}
-          >
-            {compatibility.launch.isolation === 'shared'
-              ? ui.dashboard.launchShared
-              : ui.dashboard.launch}
-          </Button>
+          <LaunchControls profile={profile} app={app} actions={actions} />
         </>
       }
     >
-      {pendingSwitch && (
-        <SwitchDialog
-          profile={profile}
-          app={app}
-          pending={pendingSwitch}
-          busy={busy === 'copy' ? null : busy}
-          onResolve={(choice) => void resolveSwitch(choice)}
-          onCancel={cancelSwitch}
-        />
-      )}
+      <LaunchDialogs profile={profile} app={app} actions={actions} />
       <div className="details">
         <section className="details-status">
           <StatusBadge report={compatibility} />

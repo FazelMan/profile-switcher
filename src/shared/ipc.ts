@@ -55,6 +55,16 @@ export interface EnvironmentSummary {
   providerOverrideVariables: string[];
   /** Terminal choices that apply to this OS. */
   terminals: TerminalId[];
+  /** Browsers that can open sign-in pages with a separate profile. */
+  browsers: {
+    installed: Array<{ id: string; name: string }>;
+    /** The OS default browser, when it is one of the supported ones. */
+    defaultId: string | null;
+    /** The browser the current setting resolves to; null when off or none is available. */
+    resolved: { id: string; name: string } | null;
+    /** False where separate sign-in browsers cannot work (Windows). */
+    supported: boolean;
+  };
 }
 
 export interface AppInfo {
@@ -136,7 +146,8 @@ export interface VerificationReport {
   appVersion: string | null;
   expectedConfigDirectory: string;
   reportedConfigDirectory: string | null;
-  configDirectoryMatches: boolean;
+  /** Null when the application does not report which folder it used. */
+  configDirectoryMatches: boolean | null;
   /** Null when the application did not report sign-in state. */
   loggedIn: boolean | null;
   authMethod: string | null;
@@ -182,6 +193,12 @@ export type SwitchDecision = { action: 'keep' } | { action: 'close'; launchIds: 
 
 export interface LaunchRequest {
   switch?: SwitchDecision;
+  /**
+   * `desktop` opens the profile's desktop companion (Claude Code profile →
+   * Claude Desktop with this profile's own data folder) instead of the
+   * application itself.
+   */
+  target?: 'app' | 'desktop';
 }
 
 export type LaunchResult =

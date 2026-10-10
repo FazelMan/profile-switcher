@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -349,5 +350,133 @@ describe.runIf(process.platform === 'linux')('concurrent profiles (real processe
     // Closing Personal did not change its folder: its sign-in is still there for next time.
     expect(hashDirectory(await dirOf(personal))).toBe(personalBefore);
     expect((await svc.verify(personal)).loggedIn).toBe(true);
+  }, 60_000);
+
+  it.each([
+    {
+      appId: 'codex-cli',
+      variable: 'CODEX_HOME',
+      credential: 'OPENAI_API_KEY',
+      signIn: 'auth.json',
+    },
+    {
+      appId: 'gemini-cli',
+      variable: 'GEMINI_CLI_HOME',
+      credential: 'GEMINI_API_KEY',
+      signIn: '.gemini/oauth_creds.json',
+    },
+  ])(
+    '$appId: two profiles run side by side, each with only its own folder',
+    async ({ appId, variable, credential, signIn }) => {
+      system = { ...system, env: { ...system.env, [credential]: 'must-not-reach-profiles' } };
+      const svc = await service();
+      const make = (name: string) =>
+        svc.create(
+          createProfileInputSchema.parse({
+            name,
+            appId,
+            color: 'blue',
+            storage: { kind: 'managed' },
+          }),
+        );
+      const personal = await make('Personal');
+      const work = await make('Work');
+      const snapshot = await svc.snapshot();
+      expect(snapshot.profiles.every((p) => p.compatibility.state === 'Supported')).toBe(true);
+      const dirOf = (id: string) => snapshot.profiles.find((p) => p.id === id)!.dataDirectory!;
+
+      await svc.launch(personal);
+      await svc.launch(work);
+      for (const id of [personal, work]) {
+        const [instance] = await waitFor(async () => {
+          const list = running(await svc.runtime(), id);
+          return list.length === 1 ? list : undefined;
+        }, `${id} to run`);
+        spawnedPids.add(instance!.pid!);
+        expect(instance!.configDirectory).toBe('verified');
+        const environ = readFileSync(`/proc/${instance!.pid}/environ`, 'utf8').split('\0');
+        expect(environ).toContain(`${variable}=${dirOf(id)}`);
+        expect(environ.some((entry) => entry.startsWith(`${credential}=`))).toBe(false);
+        // The stand-in "signs in" inside its own folder only.
+        await waitFor(
+          async () => (existsSync(path.join(dirOf(id), signIn)) ? true : undefined),
+          `${id} sign-in`,
+        );
+      }
+      expect(existsSync(path.join(system.homeDir, '.codex'))).toBe(false);
+      expect(existsSync(path.join(system.homeDir, '.gemini'))).toBe(false);
+
+      if (appId === 'codex-cli') {
+        expect(await svc.verify(personal)).toMatchObject({
+          loggedIn: true,
+          authMethod: 'ChatGPT',
+          configDirectoryMatches: null,
+        });
+      }
+      for (const id of [personal, work]) writeFileSync(path.join(dirOf(id), '.fake-stop'), '');
+      await waitFor(
+        async () => (Object.keys(await svc.runtime()).length === 0 ? true : undefined),
+        'both to exit',
+      );
+    },
+    60_000,
+  );
+
+  it("opens each profile's sign-in page in its own browser profile", async () => {
+    const browserLog = path.join(root, 'browser.jsonl');
+    system = {
+      ...system,
+      env: {
+        ...system.env,
+        PS_FAKE_OPEN_URL: 'https://claude.ai/oauth/authorize?test=1',
+        PS_E2E_BROWSER_FILE: browserLog,
+      },
+    };
+    const svc = await service();
+    // Pin the browser: CI machines have real browsers and their own default.
+    await svc.updateSettings({ signInBrowser: 'chrome' });
+    expect((await svc.snapshot()).environment.browsers.resolved).toEqual({
+      id: 'chrome',
+      name: 'Google Chrome',
+    });
+    const make = (name: string) =>
+      svc.create(
+        createProfileInputSchema.parse({
+          name,
+          appId: 'claude-code',
+          color: 'blue',
+          storage: { kind: 'managed' },
+        }),
+      );
+    const personal = await make('Personal');
+    const work = await make('Work');
+    await svc.launch(personal);
+    await svc.launch(work);
+    const opened = await waitFor(async () => {
+      if (!existsSync(browserLog)) return undefined;
+      const lines = readFileSync(browserLog, 'utf8').trim().split('\n').filter(Boolean);
+      return lines.length === 2 ? lines.map((l) => JSON.parse(l) as string[]) : undefined;
+    }, 'both sign-in pages');
+    for (const id of [personal, work]) {
+      const [instance] = running(await svc.runtime(), id);
+      if (instance?.pid) spawnedPids.add(instance.pid);
+    }
+    const dirs = opened.map((args) => args.find((a) => a.startsWith('--user-data-dir='))).sort();
+    expect(dirs).toEqual(
+      [personal, work]
+        .map((id) => `--user-data-dir=${path.join(paths.profilesRoot, '_browser', id)}`)
+        .sort(),
+    );
+    expect(opened.every((args) => args.at(-1) === 'https://claude.ai/oauth/authorize?test=1')).toBe(
+      true,
+    );
+
+    // "Off" leaves Claude Code's normal browser behavior.
+    await svc.updateSettings({ signInBrowser: 'off' });
+    expect((await svc.snapshot()).environment.browsers.resolved).toBeNull();
+    for (const id of [personal, work]) {
+      const dir = (await svc.snapshot()).profiles.find((p) => p.id === id)!.dataDirectory!;
+      writeFileSync(path.join(dir, '.fake-stop'), '');
+    }
   }, 60_000);
 });

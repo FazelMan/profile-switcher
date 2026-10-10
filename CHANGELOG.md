@@ -7,6 +7,39 @@ section matching the pushed tag as the GitHub Release notes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-10
+
+### Added
+
+- **Codex CLI** profiles: each profile runs `codex` with its own `CODEX_HOME`
+  (configuration and sign-in, in `auth.json` or a keyring entry keyed to that
+  folder). `OPENAI_API_KEY` and `CODEX_API_KEY` are removed from launches by
+  default. **Verify** runs `codex login status`.
+- **Gemini CLI** profiles: each profile runs `gemini` with its own
+  `GEMINI_CLI_HOME` (settings, history, and Google sign-in in its `.gemini`
+  folder). `GEMINI_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_CLOUD_ACCESS_TOKEN`
+  are removed by default; Vertex AI, service-account credentials, and
+  `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true` mark profiles Needs verification.
+- **Separate sign-in browser per profile** (Settings → Sign-in browser,
+  default: your default browser). Claude Code signs in through the browser,
+  which approves whichever claude.ai account the browser is signed in to.
+  Each profile now opens links, including the sign-in page, in its own
+  browser profile (Chromium-based browsers via `--user-data-dir`, Firefox via
+  `-profile`), through Claude Code's `BROWSER` variable. macOS and Linux;
+  Safari cannot open a separate profile from the command line, so another
+  installed browser is used. Profile Switcher never reads browser data.
+- **Terminal and Desktop buttons** on Claude Code profiles when Claude Desktop
+  is installed: Desktop opens Claude Desktop with that profile's own data
+  folder (experimental option, asked for on first use), so the profile has
+  the same account in both.
+
+### Changed
+
+- Verification results can say that an application does not report its
+  folder.
+- Profile list format 3 (`signInBrowser` setting). Format 2 files are
+  migrated automatically; 0.2.x opens a format 3 file read-only.
+
 ## [0.2.0] - 2026-10-10
 
 ### Added
@@ -92,6 +125,7 @@ First public preview.
   spawned process starts with only stdin, stdout, and stderr open, so no
   Electron descriptors leak into launched applications.
 
-[Unreleased]: https://github.com/FazelMan/profile-switcher/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/FazelMan/profile-switcher/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/FazelMan/profile-switcher/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/FazelMan/profile-switcher/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/FazelMan/profile-switcher/releases/tag/v0.1.0

@@ -17,7 +17,8 @@ why.
 │ ProfileService ── MetadataStore (versioned JSON)                     │
 │      │         ├─ ProcessTracker (runtime records, PID files)         │
 │      │         └─ ProcessCloser (Switch mode only, after confirmation) │
-│      ├─ AdapterRegistry ── ClaudeCodeAdapter / ClaudeDesktopAdapter   │
+│      ├─ AdapterRegistry ── Claude Code / Claude Desktop / Codex CLI / │
+│      │                      Gemini CLI adapters                        │
 │      └─ Launcher ── terminals / quoting / environment                │
 │ SystemContext: FileProbe · CommandRunner · ProcessSpawner ·          │
 │                ProcessInspector (the only place that touches the OS) │
@@ -81,6 +82,14 @@ results: `Supported`, `Unsupported`, `NeedsVerification`,
 `ApplicationNotFound`, `ConfigurationError`, plus what a launch would provide
 (`isolated`, `experimental`, or `shared`) and lists of guarantees,
 limitations, and guidance.
+
+Codex CLI and Gemini CLI share `EnvHomeCliAdapter`
+(`src/main/adapters/env-home-cli.ts`): a tool whose configuration and sign-in
+move with one documented environment variable. Each is a small spec (variable,
+credential and provider variables, default folder, optional status command,
+messages). Adapters may declare `credentialVariables` and `providerVariables`;
+Diagnostics lists the union. Detection receives a scratch folder owned by
+Profile Switcher for tools that write files even for `--version`.
 
 An adapter may declare an **experimental** isolation mechanism
 (`AppAdapter.experimental`): a feature flag in Settings (off by default) and

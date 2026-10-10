@@ -1,0 +1,13 @@
+#!/bin/sh
+# Stand-in for Google Chrome used by automated tests: records the arguments it
+# was opened with (one JSON array per line) and exits. Opens nothing.
+if [ -n "$PS_E2E_BROWSER_FILE" ]; then
+  out="["
+  sep=""
+  for arg in "$@"; do
+    out="$out$sep\"$arg\""
+    sep=","
+  done
+  printf '%s]\n' "$out" >> "$PS_E2E_BROWSER_FILE"
+fi
+exit 0
