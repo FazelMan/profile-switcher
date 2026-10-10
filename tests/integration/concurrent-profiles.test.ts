@@ -433,6 +433,8 @@ describe.runIf(process.platform === 'linux')('concurrent profiles (real processe
       },
     };
     const svc = await service();
+    // Pin the browser: CI machines have real browsers and their own default.
+    await svc.updateSettings({ signInBrowser: 'chrome' });
     expect((await svc.snapshot()).environment.browsers.resolved).toEqual({
       id: 'chrome',
       name: 'Google Chrome',
