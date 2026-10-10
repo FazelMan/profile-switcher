@@ -249,6 +249,25 @@ describe('custom directories', () => {
       );
     },
   );
+  it.skipIf(isWindows)(
+    'resolves symlinks inside reserved locations too (like macOS /var -> /private/var)',
+    async () => {
+      const realHome = path.join(root, 'real-home');
+      mkdirSync(path.join(realHome, '.claude'), { recursive: true });
+      const linkedHome = path.join(root, 'linked-home');
+      symlinkSync(realHome, linkedHome);
+      home = linkedHome; // Profile Switcher sees the home folder through a symlink.
+      const { svc } = await service();
+      await expectCode(svc.create(custom(path.join(realHome, '.claude'))), 'DIRECTORY_RESERVED');
+      const link = path.join(root, 'innocent');
+      symlinkSync(path.join(realHome, '.claude'), link);
+      await expectCode(svc.create(custom(link)), 'DIRECTORY_RESERVED');
+      // The home folder itself, reached by its real path, is reserved too.
+      await expectCode(svc.create(custom(realHome)), 'DIRECTORY_RESERVED');
+      // A subfolder of home is a legitimate location.
+      await svc.create(custom(path.join(realHome, 'profiles', 'work')));
+    },
+  );
 });
 
 describe('editing and deleting', () => {

@@ -12,6 +12,19 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      # Blocked by peer ranges: electron-vite 5 supports Vite <= 7, and
+      # @vitejs/plugin-react 6 requires Vite 8. Upgrade these together.
+      - dependency-name: vite
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@vitejs/plugin-react'
+        update-types: ['version-update:semver-major']
+      # typescript-eslint supports TypeScript < 6.1.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # Node.js types track the minimum supported runtime (engines: >=22.12).
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       dev-dependencies:
         dependency-type: development
