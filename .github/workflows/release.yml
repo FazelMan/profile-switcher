@@ -1,0 +1,168 @@
+name: Release
+
+# Pushing a tag such as v1.0.0 validates release metadata, runs the full CI
+# suite, builds installers on each OS's own runner, and publishes a GitHub
+# Release with SHA-256 checksums. Nothing is published if any step fails.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - id: meta
+        run: |
+          node scripts/verify-release.mjs "$GITHUB_REF_NAME" --notes release-notes.md
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  ci:
+    name: CI
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: [validate, ci]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac
+            os: macos-15
+          - target: win
+            os: windows-2025
+          - target: linux
+            os: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # Code signing and notarization use optional repository secrets. When a
+      # secret is missing the step reports it; nothing is faked.
+      - name: Package
+        shell: bash
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          status_file="signing-${{ matrix.target }}.txt"
+          case "${{ matrix.target }}" in
+            mac)
+              if [ -n "$MAC_CSC_LINK" ]; then
+                export CSC_LINK="$MAC_CSC_LINK" CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
+                if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+                  echo "macOS: signed with a Developer ID certificate and notarized." > "$status_file"
+                else
+                  echo "macOS: signed with a Developer ID certificate; NOT notarized (Apple notarization credentials not configured)." > "$status_file"
+                fi
+              else
+                export CSC_IDENTITY_AUTO_DISCOVERY=false
+                unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+                echo "macOS: ad-hoc signed only, NOT notarized (no Developer ID certificate configured). Gatekeeper will warn on first launch." > "$status_file"
+              fi
+              ;;
+            win)
+              if [ -n "$WIN_CSC_LINK" ]; then
+                export CSC_LINK="$WIN_CSC_LINK" CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD"
+                echo "Windows: installer signed with the configured code-signing certificate." > "$status_file"
+              else
+                export CSC_IDENTITY_AUTO_DISCOVERY=false
+                echo "Windows: installer NOT code-signed (no certificate configured). SmartScreen will warn." > "$status_file"
+              fi
+              ;;
+            linux)
+              echo "Linux: AppImage and DEB are not signed (no signing is configured for Linux packages)." > "$status_file"
+              ;;
+          esac
+          npx electron-builder --config electron-builder.config.cjs --${{ matrix.target }} --publish never
+          cat "$status_file"
+
+      - name: Collect installers
+        shell: bash
+        run: |
+          mkdir -p dist-upload
+          find release -maxdepth 2 -type f \( -name '*.dmg' -o -name '*-setup.exe' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} dist-upload/ \;
+          cp "signing-${{ matrix.target }}.txt" dist-upload/
+          ls -la dist-upload
+          test "$(find dist-upload -type f ! -name 'signing-*' | wc -l)" -gt 0
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installers-${{ matrix.target }}
+          path: dist-upload/
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: artifacts
+      - name: Assemble checksums and notes
+        run: |
+          mkdir -p upload
+          find artifacts -type f -path '*installers-*' ! -name 'signing-*' -exec cp {} upload/ \;
+          (cd upload && sha256sum * > SHA256SUMS.txt)
+          {
+            cat artifacts/release-notes/release-notes.md
+            echo
+            echo "## Signing status"
+            echo
+            for f in artifacts/installers-*/signing-*.txt; do echo "- $(cat "$f")"; done
+            echo
+            echo "## Verify your download"
+            echo
+            echo "Compare the SHA-256 of the file you downloaded with \`SHA256SUMS.txt\` (\`shasum -a 256 <file>\` on macOS, \`Get-FileHash <file>\` on Windows, \`sha256sum <file>\` on Linux)."
+            echo
+            echo "Built targets: macOS (arm64, x64) DMG, Windows x64 NSIS installer, Linux x64 AppImage and DEB. Other architectures are not built."
+          } > notes.md
+          cat notes.md
+          ls -la upload
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" upload/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Profile Switcher ${GITHUB_REF_NAME#v}" \
+            --notes-file notes.md \
+            --verify-tag \
+            "${flags[@]}"

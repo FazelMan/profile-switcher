@@ -1,15 +1,18 @@
+import identity from './app-identity.json';
+
 /**
- * Single source of truth for application identifiers. Packaging
- * (electron-builder.yml) and the main process both read these values; do not
- * hard-code them elsewhere.
+ * Single source of truth for application identifiers, shared by the main
+ * process, the renderer, and packaging (electron-builder.config.cjs reads the
+ * same JSON file). Do not hard-code these values elsewhere.
  */
-export const APP_IDENTITY = {
-  appId: 'com.profileswitcher.app',
-  productName: 'Profile Switcher',
-  /** Lower-case, filesystem-friendly name used for XDG directories on Linux. */
-  slug: 'profile-switcher',
-  repositoryUrl: 'https://github.com/FazelMan/profile-switcher',
-} as const;
+export const APP_IDENTITY: {
+  /** Reverse-DNS application identifier (macOS bundle ID, Windows AppUserModelID). */
+  readonly appId: string;
+  readonly productName: string;
+  /** Lower-case, filesystem-friendly name used for XDG directories and artifact names. */
+  readonly slug: string;
+  readonly repositoryUrl: string;
+} = Object.freeze(identity);
 
 /**
  * Environment variable that relocates every Profile Switcher directory under a

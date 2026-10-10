@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Profile Switcher app icon. Original artwork, released under the project's MIT license. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2f4ac7"/>
+      <stop offset="1" stop-color="#6d3fd6"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <!-- Back card -->
+  <rect x="300" y="236" width="460" height="340" rx="56" fill="#ffffff" fill-opacity="0.28"/>
+  <!-- Front card -->
+  <rect x="264" y="420" width="460" height="340" rx="56" fill="#ffffff"/>
+  <circle cx="374" cy="530" r="52" fill="#3b5bdb"/>
+  <rect x="452" y="500" width="208" height="28" rx="14" fill="#c9d1f0"/>
+  <rect x="452" y="548" width="144" height="28" rx="14" fill="#e3e7f7"/>
+  <rect x="318" y="646" width="352" height="56" rx="28" fill="#3b5bdb"/>
+  <!-- Switch arrows -->
+  <path d="M760 392 l70 -62 l-70 -62 v38 h-108 v48 h108 z" fill="#ffffff"/>
+</svg>

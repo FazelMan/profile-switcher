@@ -66,6 +66,12 @@ export default tseslint.config(
     },
   },
   {
+    // CommonJS config files consumed by tools that require CommonJS.
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
     // Tests assert on values they just constructed; non-null assertions keep them readable.
     files: ['tests/**/*.{ts,tsx}'],
     rules: {

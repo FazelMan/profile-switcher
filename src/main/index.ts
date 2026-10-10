@@ -61,6 +61,9 @@ async function bootstrap(logger: Logger): Promise<void> {
     callback(false),
   );
   session.defaultSession.setPermissionCheckHandler(() => false);
+  // Chromium's spell checker downloads dictionaries from Google servers.
+  // Profile Switcher makes no network requests of its own, so turn it off.
+  session.defaultSession.setSpellCheckerEnabled(false);
 
   const store = new MetadataStore({ filePath: paths.metadataFile, logger });
   const registry = createDefaultRegistry();

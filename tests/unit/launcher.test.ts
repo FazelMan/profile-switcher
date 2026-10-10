@@ -160,7 +160,8 @@ describe('Launcher on Linux', () => {
   });
 });
 
-describe('Launcher on macOS', () => {
+// Simulates macOS with real temp files; host path separators must be POSIX.
+describe.skipIf(process.platform === 'win32')('Launcher on macOS', () => {
   let launchersDir: string;
   beforeEach(() => {
     launchersDir = mkdtempSync(path.join(os.tmpdir(), 'ps-launchers-'));
