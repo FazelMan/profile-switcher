@@ -1,18 +1,33 @@
 name: Release
 
-# Pushing a tag such as v1.0.0 validates release metadata, runs the full CI
-# suite, builds installers on each OS's own runner, and publishes a GitHub
-# Release with SHA-256 checksums. Nothing is published if any step fails.
+# Releases start in one of two ways:
+#  - pushing a tag such as v1.0.0, or
+#  - Actions -> Release -> Run workflow on main, entering the tag; the
+#    workflow creates the tag on main's current commit when it publishes.
+# Either way it validates release metadata, runs the full CI suite, builds
+# installers on each OS's own runner, and publishes a GitHub Release with
+# SHA-256 checksums. Nothing is published if any step fails.
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create and release, e.g. v0.1.0 (must match package.json and CHANGELOG.md)'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+env:
+  # User input is only ever read through this variable, never interpolated
+  # into script text, and verify-release.mjs validates its format.
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -28,8 +43,18 @@ jobs:
           node-version-file: .nvmrc
       - id: meta
         run: |
-          node scripts/verify-release.mjs "$GITHUB_REF_NAME" --notes release-notes.md
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "Manual releases run only on main (got $GITHUB_REF)." >&2
+              exit 1
+            fi
+            if [ -n "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")" ]; then
+              echo "Tag $RELEASE_TAG already exists; push-tag releases build from the tag itself." >&2
+              exit 1
+            fi
+          fi
+          node scripts/verify-release.mjs "$RELEASE_TAG" --notes release-notes.md
+          if [[ "$RELEASE_TAG" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-notes
@@ -160,9 +185,11 @@ jobs:
         run: |
           flags=()
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
-          gh release create "$GITHUB_REF_NAME" upload/* \
+          # A pushed tag must already exist; a manual run creates the tag on
+          # the exact commit that was tested and built.
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then flags+=(--verify-tag); else flags+=(--target "$GITHUB_SHA"); fi
+          gh release create "$RELEASE_TAG" upload/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Profile Switcher ${GITHUB_REF_NAME#v}" \
+            --title "Profile Switcher ${RELEASE_TAG#v}" \
             --notes-file notes.md \
-            --verify-tag \
             "${flags[@]}"

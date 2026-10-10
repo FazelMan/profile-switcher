@@ -232,6 +232,10 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+Alternatively, without pushing a tag yourself: **Actions → Release → Run
+workflow** on `main`, entering the tag (for example `v0.1.0`); the workflow
+creates the tag on the commit it built.
+
 The [release workflow](.github/workflows/release.yml) validates the tag and
 changelog, runs the full CI suite, builds on macOS, Windows, and Linux runners,
 generates `SHA256SUMS.txt`, and publishes the GitHub Release with the changelog
