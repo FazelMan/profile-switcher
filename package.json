@@ -2,7 +2,7 @@
   "name": "profile-switcher",
   "productName": "Profile Switcher",
   "desktopName": "profile-switcher.desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A cross-platform desktop app to switch between isolated profiles for AI coding tools and developer applications.",
   "license": "MIT",
   "author": {
