@@ -421,4 +421,60 @@ describe.runIf(process.platform === 'linux')('concurrent profiles (real processe
     },
     60_000,
   );
+
+  it("opens each profile's sign-in page in its own browser profile", async () => {
+    const browserLog = path.join(root, 'browser.jsonl');
+    system = {
+      ...system,
+      env: {
+        ...system.env,
+        PS_FAKE_OPEN_URL: 'https://claude.ai/oauth/authorize?test=1',
+        PS_E2E_BROWSER_FILE: browserLog,
+      },
+    };
+    const svc = await service();
+    expect((await svc.snapshot()).environment.browsers.resolved).toEqual({
+      id: 'chrome',
+      name: 'Google Chrome',
+    });
+    const make = (name: string) =>
+      svc.create(
+        createProfileInputSchema.parse({
+          name,
+          appId: 'claude-code',
+          color: 'blue',
+          storage: { kind: 'managed' },
+        }),
+      );
+    const personal = await make('Personal');
+    const work = await make('Work');
+    await svc.launch(personal);
+    await svc.launch(work);
+    const opened = await waitFor(async () => {
+      if (!existsSync(browserLog)) return undefined;
+      const lines = readFileSync(browserLog, 'utf8').trim().split('\n').filter(Boolean);
+      return lines.length === 2 ? lines.map((l) => JSON.parse(l) as string[]) : undefined;
+    }, 'both sign-in pages');
+    for (const id of [personal, work]) {
+      const [instance] = running(await svc.runtime(), id);
+      if (instance?.pid) spawnedPids.add(instance.pid);
+    }
+    const dirs = opened.map((args) => args.find((a) => a.startsWith('--user-data-dir='))).sort();
+    expect(dirs).toEqual(
+      [personal, work]
+        .map((id) => `--user-data-dir=${path.join(paths.profilesRoot, '_browser', id)}`)
+        .sort(),
+    );
+    expect(opened.every((args) => args.at(-1) === 'https://claude.ai/oauth/authorize?test=1')).toBe(
+      true,
+    );
+
+    // "Off" leaves Claude Code's normal browser behavior.
+    await svc.updateSettings({ signInBrowser: 'off' });
+    expect((await svc.snapshot()).environment.browsers.resolved).toBeNull();
+    for (const id of [personal, work]) {
+      const dir = (await svc.snapshot()).profiles.find((p) => p.id === id)!.dataDirectory!;
+      writeFileSync(path.join(dir, '.fake-stop'), '');
+    }
+  }, 60_000);
 });

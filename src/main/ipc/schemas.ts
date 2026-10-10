@@ -26,6 +26,7 @@ export const launchRequestSchema = z
           .strict(),
       ])
       .optional(),
+    target: z.enum(['app', 'desktop']).optional(),
   })
   .strict();
 

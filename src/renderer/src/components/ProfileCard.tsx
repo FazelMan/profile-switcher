@@ -1,4 +1,4 @@
-import { ClipboardCopy, Info, Pencil, Play, Trash2 } from 'lucide-react';
+import { Info, Pencil, Trash2 } from 'lucide-react';
 import type { AppSummary } from '@shared/domain/compatibility';
 import type { ProfileView } from '@shared/ipc';
 import { useProfileActions } from '../hooks/useProfileActions';
@@ -6,9 +6,8 @@ import { useI18n } from '../i18n';
 import { useController } from '../state';
 import { AppGlyph } from './AppGlyph';
 import { RuntimeIndicator } from './RuntimeStatus';
-import { Button } from './Button';
 import { StatusBadge } from './StatusBadge';
-import { SwitchDialog } from './SwitchDialog';
+import { LaunchControls, LaunchDialogs } from './LaunchControls';
 
 export interface ProfileCardProps {
   profile: ProfileView;
@@ -30,17 +29,10 @@ export function ProfileCard({
   onDelete,
 }: ProfileCardProps) {
   const { ui, format, relativeTime } = useI18n();
-  const { snapshot, runtime } = useController();
+  const { runtime } = useController();
   const instances = runtime[profile.id] ?? [];
-  const { busy, primary, pendingSwitch, resolveSwitch, cancelSwitch } = useProfileActions(
-    profile,
-    app,
-  );
+  const actions = useProfileActions(profile, app);
   const { compatibility } = profile;
-  const copyMode =
-    app?.kind === 'cli' &&
-    app.supportsCopyCommand &&
-    snapshot?.settings.cliLaunchBehavior === 'copy-command';
   const headingId = `profile-${profile.id}-name`;
 
   let lastLaunchText: string = ui.dashboard.neverLaunched;
@@ -53,12 +45,6 @@ export function ProfileCard({
       { time },
     );
   }
-
-  const primaryLabel = copyMode
-    ? ui.dashboard.copyCommand
-    : compatibility.launch.isolation === 'shared'
-      ? ui.dashboard.launchShared
-      : ui.dashboard.launch;
 
   return (
     <>
@@ -98,22 +84,7 @@ export function ProfileCard({
         </p>
 
         <footer className="profile-card-actions">
-          <Button
-            variant="primary"
-            icon={
-              copyMode ? (
-                <ClipboardCopy className="icon" aria-hidden="true" />
-              ) : (
-                <Play className="icon" aria-hidden="true" />
-              )
-            }
-            loading={busy !== null}
-            disabled={!compatibility.launch.available}
-            onClick={() => void primary()}
-            aria-describedby={headingId}
-          >
-            {busy === 'launch' ? ui.dashboard.launching : primaryLabel}
-          </Button>
+          <LaunchControls profile={profile} app={app} actions={actions} describedBy={headingId} />
           <div className="card-secondary-actions">
             <button
               type="button"
@@ -147,16 +118,7 @@ export function ProfileCard({
           </div>
         </footer>
       </article>
-      {pendingSwitch && (
-        <SwitchDialog
-          profile={profile}
-          app={app}
-          pending={pendingSwitch}
-          busy={busy === 'copy' ? null : busy}
-          onResolve={(choice) => void resolveSwitch(choice)}
-          onCancel={cancelSwitch}
-        />
-      )}
+      <LaunchDialogs profile={profile} app={app} actions={actions} />
     </>
   );
 }

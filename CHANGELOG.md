@@ -20,6 +20,18 @@ section matching the pushed tag as the GitHub Release notes.
   `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true` mark profiles Needs verification.
 - Verification results can say that an application does not report its
   folder.
+- **Separate sign-in browser per profile** (Settings → Sign-in browser,
+  default: your default browser). Claude Code signs in through the browser,
+  which approves whichever claude.ai account the browser is signed in to.
+  Each profile now opens links, including the sign-in page, in its own
+  browser profile (Chromium-based browsers via `--user-data-dir`, Firefox via
+  `-profile`), through Claude Code's `BROWSER` variable. macOS and Linux;
+  Safari cannot open a separate profile from the command line, so another
+  installed browser is used. Profile Switcher never reads browser data.
+- **Terminal and Desktop buttons** on Claude Code profiles when Claude Desktop
+  is installed: Desktop opens Claude Desktop with that profile's own data
+  folder (experimental option, asked for on first use), so the profile has
+  the same account in both.
 
 ## [0.2.0] - 2026-10-10
 

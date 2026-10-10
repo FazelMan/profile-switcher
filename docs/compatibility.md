@@ -248,6 +248,36 @@ inside this directory", useful for "keeping CLI state isolated". In Gemini CLI
 | Two profiles run concurrently with their own `GEMINI_CLI_HOME` and no key variable                          | Linux, stand-in `gemini`                                                         | Passing                         |
 | Google sign-in for two real accounts; macOS/Windows                                                         | —                                                                                | **Not verified yet**            |
 
+## Signing in to different accounts (browser profiles)
+
+Claude Code's `/login` opens the claude.ai sign-in page in a browser, and that
+page approves whichever account the browser is signed in to. With one shared
+browser, a second profile therefore tends to get the first profile's account.
+
+Profile Switcher gives each Claude Code profile its own browser profile:
+
+- It finds the OS default browser (macOS LaunchServices via `plutil`; Linux
+  `xdg-settings`) and supports Chrome, Edge, Brave, Chromium, Vivaldi
+  (`--user-data-dir`, a documented Chromium switch) and Firefox (`-profile`).
+  Safari cannot be started with a separate profile from the command line, so
+  another installed supported browser is used; Settings shows which.
+- Each profile gets a browser folder under the managed profiles root
+  (`profiles/_browser/<profile ID>`), and a small per-profile opener script.
+  Claude Code is started with `BROWSER` set to that opener; Claude Code reads
+  `BROWSER` to open links (from its source, version 2.1.296), so its sign-in
+  page opens in that profile's own browser window.
+- Profile Switcher never reads the browser folder. Deleting a profile leaves
+  it on disk, like the profile folder.
+- Not available on Windows (applications there do not run a command file
+  given in `BROWSER`). Codex CLI and Gemini CLI open their sign-in pages
+  themselves and are not routed.
+- Claude Desktop (including Desktop profiles) signs in through the system
+  default browser; Profile Switcher cannot route that.
+
+Tested on Linux with stand-in Claude Code and browser executables: two
+profiles' sign-in pages open with two different browser folders
+(`tests/integration/concurrent-profiles.test.ts`). Not yet verified on a Mac.
+
 ## Launch modes
 
 Chosen per application in **Settings → Running several profiles**:

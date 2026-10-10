@@ -64,6 +64,24 @@ export const TERMINAL_IDS = [
 ] as const;
 export type TerminalId = (typeof TERMINAL_IDS)[number];
 
+/**
+ * Which browser opens sign-in pages for applications that support it:
+ * `auto` uses the OS default browser (or another supported one) with a
+ * separate browser profile per Profile Switcher profile; `off` leaves the
+ * application's normal behavior (the shared default browser).
+ */
+export const SIGN_IN_BROWSER_CHOICES = [
+  'auto',
+  'off',
+  'chrome',
+  'edge',
+  'brave',
+  'chromium',
+  'vivaldi',
+  'firefox',
+] as const;
+export type SignInBrowserChoice = (typeof SIGN_IN_BROWSER_CHOICES)[number];
+
 export const settingsSchema = z
   .object({
     theme: z.enum(THEMES),
@@ -75,6 +93,7 @@ export const settingsSchema = z
       .record(appIdSchema, z.enum(LAUNCH_MODES))
       .refine((modes) => Object.keys(modes).length <= 32, 'Too many launch modes'),
     experimental: experimentalSettingsSchema,
+    signInBrowser: z.enum(SIGN_IN_BROWSER_CHOICES),
   })
   .strict();
 export type Settings = z.infer<typeof settingsSchema>;
@@ -86,6 +105,7 @@ export const DEFAULT_SETTINGS: Settings = {
   preferredTerminal: 'auto',
   launchModes: {},
   experimental: { claudeDesktopIsolation: false },
+  signInBrowser: 'auto',
 };
 
 export function launchModeFor(settings: Settings, appId: string): LaunchMode {

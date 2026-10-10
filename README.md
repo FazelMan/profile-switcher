@@ -104,6 +104,17 @@ or both side by side, with one click. Everything stays on your computer.
   has no sign-in status command, so there is no **Verify**. If
   `GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true` is set, Gemini CLI uses one
   keychain entry for every folder and profiles show **Needs verification**.
+- **Signing in to different accounts.** Claude Code signs in through your
+  browser, and the sign-in page approves whichever claude.ai account the
+  browser is signed in to. Profile Switcher therefore opens each profile's
+  links — including its sign-in page — in a separate browser profile of your
+  default browser (Chrome, Edge, Brave, Chromium, Vivaldi, or Firefox; macOS
+  and Linux), so Personal and Work each stay signed in to their own account.
+  Change or turn this off in **Settings → Sign-in browser**.
+- **Terminal and Desktop.** When Claude Desktop is installed, Claude Code
+  profiles have two buttons: **Terminal** (Claude Code CLI) and **Desktop**
+  (Claude Desktop with that profile's own data folder — the experimental
+  option above, which Profile Switcher asks to turn on the first time).
 - For both, variables that supply a key directly (`OPENAI_API_KEY`,
   `CODEX_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`,
   `GOOGLE_CLOUD_ACCESS_TOKEN`) are removed from launches by default. Both were

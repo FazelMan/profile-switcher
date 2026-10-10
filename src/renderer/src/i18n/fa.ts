@@ -275,6 +275,11 @@ const errors: Record<ErrorCode, ErrorText> = {
     reason: 'Profile Switcher برنامهٔ ترمینال انتخاب‌شده را پیدا نکرد.',
     next: 'یک ترمینال نصب کنید، ترمینال دیگری را در تنظیمات برگزینید یا از «رونوشت فرمان» استفاده کنید.',
   },
+  EXPERIMENTAL_DISABLED: {
+    title: 'باز کردن {app} با این پروفایل آزمایشی است',
+    reason: 'برای این کار گزینهٔ آزمایشی پروفایل‌های جداگانهٔ {app} باید روشن باشد.',
+    next: 'آن را در تنظیمات ← آزمایشی روشن کنید و دوباره امتحان کنید.',
+  },
   SWITCH_CLOSE_FAILED: {
     title: 'پروفایل دیگر بسته نشد',
     reason:
@@ -402,6 +407,17 @@ export const fa: Catalog = {
       readOnly: 'فقط‌خواندنی: امکان تغییر غیرفعال است.',
       empty: 'هنوز پروفایلی برای این برنامه وجود ندارد.',
       experimentalBadge: 'آزمایشی',
+      openIn: 'باز کردن این پروفایل در',
+      openTerminal: 'ترمینال',
+      openDesktop: 'دسکتاپ',
+      terminalHelp: 'Claude Code در ترمینال، با حساب همین پروفایل',
+      desktopHelp:
+        'Claude Desktop با پوشهٔ دادهٔ مخصوص همین پروفایل (آزمایشی)، تا با حساب همین پروفایل وارد بماند',
+    },
+    desktopOptIn: {
+      title: '«{name}» در Claude Desktop باز شود؟',
+      body: 'باز کردن Claude Desktop با حساب مخصوص این پروفایل از گزینهٔ آزمایشی پروفایل‌های جداگانهٔ Claude Desktop استفاده می‌کند. آن را روشن کنم و Claude Desktop را باز کنم؟',
+      confirm: 'روشن کن و باز کن',
     },
     firstRun: {
       title: 'نخستین پروفایل‌هایتان را بسازید',
@@ -589,6 +605,16 @@ export const fa: Catalog = {
         'copy-command': 'کپی فرمان اجرا در کلیپ‌بورد',
       },
       terminal: 'ترمینال',
+      signInBrowser: 'مرورگر ورود',
+      signInBrowserHelp:
+        'Claude Code از طریق مرورگر وارد می‌شود و مرورگر هر حسابی را که در آن وارد است تأیید می‌کند. هر پروفایل یک پروفایل مرورگر جداگانه می‌گیرد تا هرکدام با حساب خودش وارد بماند. Profile Switcher هرگز داده‌های مرورگر را نمی‌خواند.',
+      signInBrowserAuto: 'مرورگر پیش‌فرض ({browser})',
+      signInBrowserAutoNone: 'خودکار (مرورگر پشتیبانی‌شده‌ای پیدا نشد)',
+      signInBrowserOff: 'خاموش: همان مرورگر پیش‌فرض (ورود مشترک)',
+      signInBrowserUnsupported:
+        'مرورگر ورود جداگانه در ویندوز در دسترس نیست. هنگام ورود برای هر حساب از پنجرهٔ ناشناس استفاده کنید.',
+      signInBrowserSafari:
+        'مرورگر پیش‌فرض شما را نمی‌توان از Profile Switcher با پروفایل جداگانه باز کرد؛ به‌جای آن از {browser} استفاده می‌شود.',
       terminals: {
         auto: 'خودکار',
         'macos-terminal': 'Terminal',

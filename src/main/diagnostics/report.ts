@@ -41,6 +41,10 @@ export function buildDiagnosticsReport(
         `${app.experimental ? `; experimental isolation: ${app.experimental.enabled ? 'on' : 'off'}` : ''}`,
     );
   }
+  lines.push(
+    `  Sign-in browser: ${environment.browsers.supported ? (environment.browsers.resolved?.id ?? 'none') : 'not supported on this OS'}` +
+      ` (installed: ${environment.browsers.installed.map((b) => b.id).join(', ') || 'none'}; default: ${environment.browsers.defaultId ?? 'unknown/unsupported'})`,
+  );
   lines.push('');
   lines.push('Environment (variable names only)');
   lines.push(

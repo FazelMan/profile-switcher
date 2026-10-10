@@ -102,6 +102,14 @@ export interface AppAdapter {
   readonly credentialVariables?: readonly string[];
   /** Variables that switch the application to another provider or credential store. */
   readonly providerVariables?: readonly EnvSwitch[];
+  /**
+   * The application opens links, including its sign-in page, with the
+   * command in BROWSER; Profile Switcher can then give each profile its own
+   * browser profile for signing in.
+   */
+  readonly honorsBrowserVariable?: boolean;
+  /** Adapter ID of a desktop app that can be opened with this profile's account. */
+  readonly desktopCompanion?: string;
 
   /** The application's own default configuration locations. Custom profile directories may not overlap these. */
   reservedDirectories(system: SystemContext): string[];

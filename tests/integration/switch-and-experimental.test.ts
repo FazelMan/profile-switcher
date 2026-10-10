@@ -376,6 +376,45 @@ describe.skipIf(isWindows)('experimental Claude Desktop profiles (macOS rules)',
   });
 });
 
+describe.skipIf(isWindows)('Claude Code profile opened in Claude Desktop', () => {
+  it("asks for the experimental option, then opens Desktop with this profile's own folder", async () => {
+    const app = withClaudeApp('0.14.10');
+    const { svc, plans } = await harness({ platform: 'darwin', files: app.files });
+    const snapshot = await svc.snapshot();
+    expect(snapshot.apps.find((a) => a.id === 'claude-code')?.desktopCompanion).toEqual({
+      appId: 'claude-desktop',
+      displayName: 'Claude Desktop',
+      available: true,
+    });
+    const personal = await svc.create(input({ name: 'Personal' }));
+    const work = await svc.create(input({ name: 'Work' }));
+    await expect(svc.launch(personal, { target: 'desktop' })).rejects.toMatchObject({
+      appError: { code: 'EXPERIMENTAL_DISABLED' },
+    });
+    expect(plans).toEqual([]);
+
+    await svc.updateSettings({ experimental: { claudeDesktopIsolation: true } });
+    await launched(svc, personal, { target: 'desktop' });
+    await launched(svc, work, { target: 'desktop' });
+    await launched(svc, work);
+    expect(plans.map((plan) => (plan.type === 'desktop' ? plan.args : plan.type))).toEqual([
+      [`--user-data-dir=${path.join(paths.profilesRoot, '_desktop', personal)}`],
+      [`--user-data-dir=${path.join(paths.profilesRoot, '_desktop', work)}`],
+      'cli',
+    ]);
+    // Both the Desktop and the terminal instance count as the Work profile running.
+    expect((await svc.runtime())[work]).toHaveLength(2);
+  });
+
+  it('opens Claude Desktop normally for a profile that uses the default configuration', async () => {
+    const app = withClaudeApp('0.14.10');
+    const { svc, plans } = await harness({ platform: 'darwin', files: app.files });
+    const id = await svc.create(input({ name: 'Default', storage: { kind: 'app-default' } }));
+    await launched(svc, id, { target: 'desktop' });
+    expect(plans[0]).toMatchObject({ type: 'desktop', args: [], isolation: 'shared' });
+  });
+});
+
 describe('IPC handler', () => {
   it('returns confirm-switch without a snapshot and launched results with one', async () => {
     const { createIpcHandlers } = await import('../../src/main/ipc/handlers');

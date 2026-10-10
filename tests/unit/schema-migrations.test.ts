@@ -130,7 +130,7 @@ describe('metadataDocumentSchema invariants', () => {
   });
 });
 
-describe('migration 1 → 2', () => {
+describe('migrations 1 → 2 → 3', () => {
   it('upgrades a 0.1.x document without changing what existing profiles do', () => {
     const v1 = {
       schemaVersion: 1,
@@ -165,7 +165,7 @@ describe('migration 1 → 2', () => {
     expect(outcome.kind).toBe('migrated');
     if (outcome.kind !== 'migrated') return;
     const parsed = metadataDocumentSchema.parse(outcome.document);
-    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.schemaVersion).toBe(3);
     expect(parsed.settings).toEqual({
       theme: 'dark',
       language: 'en',
@@ -173,6 +173,7 @@ describe('migration 1 → 2', () => {
       preferredTerminal: 'auto',
       launchModes: {},
       experimental: { claudeDesktopIsolation: false },
+      signInBrowser: 'auto',
     });
     expect(parsed.profiles[0]).toMatchObject({ id: 'work-abc', manualCheck: null });
     expect(parsed.lastLaunchedProfileId).toBe('work-abc');

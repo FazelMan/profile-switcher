@@ -289,6 +289,11 @@ const errors: Record<ErrorCode, ErrorText> = {
     reason: 'Profile Switcher could not find the selected terminal application.',
     next: 'Install a terminal, pick another one in Settings, or use Copy command.',
   },
+  EXPERIMENTAL_DISABLED: {
+    title: 'Opening {app} with this profile is experimental',
+    reason: 'It needs the experimental option for separate {app} profiles.',
+    next: 'Turn it on in Settings → Experimental, then try again.',
+  },
   SWITCH_CLOSE_FAILED: {
     title: 'The other profile did not close',
     reason:
@@ -415,6 +420,17 @@ export const en = {
       readOnly: 'Read-only: changes are disabled.',
       empty: 'No profiles for this application yet.',
       experimentalBadge: 'Experimental',
+      openIn: 'Open this profile in',
+      openTerminal: 'Terminal',
+      openDesktop: 'Desktop',
+      terminalHelp: "Claude Code in a terminal, signed in with this profile's account",
+      desktopHelp:
+        "Claude Desktop with this profile's own data folder (experimental), so it can stay signed in to this profile's account",
+    },
+    desktopOptIn: {
+      title: 'Open "{name}" in Claude Desktop?',
+      body: "Opening Claude Desktop with this profile's own account uses the experimental option for separate Claude Desktop profiles. Turn it on and open Claude Desktop now?",
+      confirm: 'Turn on and open',
     },
     firstRun: {
       title: 'Set up your first profiles',
@@ -601,6 +617,16 @@ export const en = {
         'copy-command': 'Copy the launch command to the clipboard',
       },
       terminal: 'Terminal',
+      signInBrowser: 'Sign-in browser',
+      signInBrowserHelp:
+        "Claude Code signs in through your browser, which approves whichever account the browser is signed in to. Each profile gets its own browser profile, so each one stays signed in to its own account. Profile Switcher never reads the browser's data.",
+      signInBrowserAuto: 'Default browser ({browser})',
+      signInBrowserAutoNone: 'Automatic (no supported browser found)',
+      signInBrowserOff: 'Off: use the default browser as it is (shared sign-in)',
+      signInBrowserUnsupported:
+        'Separate sign-in browsers are not available on Windows. Use a private window for each account when signing in.',
+      signInBrowserSafari:
+        'Your default browser cannot open a separate profile from Profile Switcher; {browser} is used instead.',
       terminals: {
         auto: 'Automatic',
         'macos-terminal': 'Terminal',

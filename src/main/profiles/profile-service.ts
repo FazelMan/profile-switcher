@@ -28,7 +28,16 @@ import type {
   VerificationReport,
 } from '@shared/ipc';
 import type { AdapterRegistry } from '../adapters/registry';
-import type { AppAdapter, ProfileFsState } from '../adapters/types';
+import type { AppAdapter, LaunchPlan, ProfileFsState } from '../adapters/types';
+import { promises as fs } from 'node:fs';
+import {
+  buildBrowserOpener,
+  chooseBrowser,
+  defaultBrowserId,
+  detectBrowsers,
+  type InstalledBrowser,
+} from '../browsers';
+import { writeFileAtomic } from '../storage/atomic-write';
 import type { Logger } from '../diagnostics/logger';
 import { buildCopyCommand } from '../launch/commands';
 import { activeVariables, presentVariables } from '../launch/environment';
@@ -94,6 +103,10 @@ export class ProfileService {
   private readonly deps: ProfileServiceDeps;
   private readonly now: () => Date;
   private readonly detections = new Map<string, DetectionResult>();
+  private browsers: { installed: InstalledBrowser[]; defaultId: string | null } = {
+    installed: [],
+    defaultId: null,
+  };
   private notices: Message[] = [];
   private detectionInFlight: Promise<void> | null = null;
 
@@ -134,6 +147,14 @@ export class ProfileService {
           }),
         );
         for (const [id, result] of results) this.detections.set(id, result);
+        try {
+          this.browsers = {
+            installed: await detectBrowsers(this.deps.system),
+            defaultId: await defaultBrowserId(this.deps.system),
+          };
+        } catch (error) {
+          this.deps.logger.warn('browsers.detect-failed', { error });
+        }
         this.deps.logger.info('detection.completed', {
           results: results.map(([id, r]) => ({
             id,
@@ -191,6 +212,15 @@ export class ProfileService {
         ),
       ],
       terminals: terminalIdsFor(system.platform),
+      browsers: {
+        installed: this.browsers.installed.map(({ id, name }) => ({ id, name })),
+        defaultId: this.browsers.defaultId,
+        resolved: (() => {
+          const browser = this.signInBrowser(doc.settings);
+          return browser ? { id: browser.id, name: browser.name } : null;
+        })(),
+        supported: this.signInBrowsersSupported(),
+      },
     };
     return {
       appInfo: this.deps.appInfo,
@@ -248,6 +278,24 @@ export class ProfileService {
       supportsVerification: adapter.supportsVerification,
       supportsCopyCommand: adapter.supportsCopyCommand,
       copyCommandShells: adapter.shellsFor?.(this.deps.system.platform) ?? [],
+      signInBrowser:
+        adapter.honorsBrowserVariable === true &&
+        this.signInBrowsersSupported() &&
+        this.signInBrowser(settings) !== null,
+      desktopCompanion: (() => {
+        const companion = adapter.desktopCompanion
+          ? this.deps.registry.get(adapter.desktopCompanion)
+          : undefined;
+        if (!companion) return null;
+        const supported = (companion.supportedPlatforms as readonly string[]).includes(
+          this.deps.system.platform,
+        );
+        return {
+          appId: companion.id,
+          displayName: companion.displayName,
+          available: supported && this.detection(companion.id).status === 'found',
+        };
+      })(),
       experimental: experimental
         ? {
             feature: experimental.feature,
@@ -594,6 +642,84 @@ export class ProfileService {
     }
   }
 
+  private signInBrowsersSupported(): boolean {
+    const { platform } = this.deps.system;
+    return platform === 'darwin' || platform === 'linux';
+  }
+
+  private signInBrowser(settings: Settings): InstalledBrowser | null {
+    if (!this.signInBrowsersSupported()) return null;
+    return chooseBrowser(settings.signInBrowser, this.browsers.installed, this.browsers.defaultId);
+  }
+
+  /**
+   * For applications that open their sign-in page with the command in
+   * BROWSER, points BROWSER at a per-profile opener that uses a separate
+   * browser profile (its own folder under the managed profiles root), so each
+   * Profile Switcher profile can stay signed in to its own account in the
+   * browser too. The browser folder's contents are never read.
+   */
+  private async withSignInBrowser(
+    profile: Profile,
+    adapter: AppAdapter,
+    plan: LaunchPlan,
+  ): Promise<LaunchPlan> {
+    if (plan.type !== 'cli' || !adapter.honorsBrowserVariable) return plan;
+    if (profile.storage.kind === 'app-default') return plan;
+    const browser = this.signInBrowser(this.settings());
+    if (!browser) return plan;
+    const p = pathApiFor(this.deps.system.platform);
+    const browserDir = p.join(this.deps.paths.profilesRoot, '_browser', profile.id);
+    await createPrivateDirectory(browserDir);
+    await fs.mkdir(this.deps.paths.launchersDir, { recursive: true, mode: 0o700 });
+    const opener = p.join(this.deps.paths.launchersDir, `${profile.id}.browser.sh`);
+    await writeFileAtomic(
+      opener,
+      buildBrowserOpener(browser, browserDir, this.deps.system.platform),
+      { mode: 0o700 },
+    );
+    await fs.chmod(opener, 0o700);
+    return { ...plan, env: { ...plan.env, set: { ...plan.env.set, BROWSER: opener } } };
+  }
+
+  /**
+   * Claude Desktop opened with this profile's account: its own data folder
+   * (under the managed profiles root, keyed by profile ID) passed as
+   * --user-data-dir. Rests on the experimental Claude Desktop mechanism, so it
+   * requires that setting; a profile using the application default opens
+   * Claude Desktop normally.
+   */
+  private async desktopPlan(profile: Profile, adapter: AppAdapter): Promise<LaunchPlan> {
+    const companion = adapter.desktopCompanion
+      ? this.deps.registry.get(adapter.desktopCompanion)
+      : undefined;
+    if (!companion) throw new AppFailure('VALIDATION_FAILED', { field: 'target' });
+    const experimental = this.settings().experimental;
+    const shared = profile.storage.kind === 'app-default';
+    if (!shared && !experimental.claudeDesktopIsolation)
+      throw new AppFailure('EXPERIMENTAL_DISABLED', { app: companion.displayName });
+    let dataDirectory: string | null = null;
+    if (!shared) {
+      dataDirectory = pathApiFor(this.deps.system.platform).join(
+        this.deps.paths.profilesRoot,
+        '_desktop',
+        profile.id,
+      );
+      await createPrivateDirectory(dataDirectory);
+    }
+    return companion.buildLaunchPlan({
+      profile: {
+        ...profile,
+        appId: companion.id,
+        storage: shared ? { kind: 'app-default' } : { kind: 'managed' },
+      },
+      dataDirectory,
+      detection: this.detection(companion.id),
+      system: this.deps.system,
+      experimental,
+    });
+  }
+
   /**
    * Other profiles of the same application that are running now. Only
    * instances the tracker has confirmed as the launched application can be
@@ -675,13 +801,20 @@ export class ProfileService {
    */
   async launch(id: string, request: LaunchRequest = {}): Promise<LaunchOutcome> {
     const { profile, adapter, dataDirectory, detection } = await this.prepare(id);
-    const plan = adapter.buildLaunchPlan({
-      profile,
-      dataDirectory,
-      detection,
-      system: this.deps.system,
-      experimental: this.settings().experimental,
-    });
+    const plan =
+      request.target === 'desktop'
+        ? await this.desktopPlan(profile, adapter)
+        : await this.withSignInBrowser(
+            profile,
+            adapter,
+            adapter.buildLaunchPlan({
+              profile,
+              dataDirectory,
+              detection,
+              system: this.deps.system,
+              experimental: this.settings().experimental,
+            }),
+          );
 
     let closedProfileIds: string[] = [];
     if (request.switch?.action === 'close') {
@@ -767,13 +900,17 @@ export class ProfileService {
       throw new AppFailure('VALIDATION_FAILED', { field: 'shell' });
     }
     const { profile, dataDirectory, detection } = await this.prepare(id);
-    const plan = adapter.buildLaunchPlan({
+    const plan = await this.withSignInBrowser(
       profile,
-      dataDirectory,
-      detection,
-      system: this.deps.system,
-      experimental: this.settings().experimental,
-    });
+      adapter,
+      adapter.buildLaunchPlan({
+        profile,
+        dataDirectory,
+        detection,
+        system: this.deps.system,
+        experimental: this.settings().experimental,
+      }),
+    );
     if (plan.type !== 'cli') throw new AppFailure('VALIDATION_FAILED', { field: 'shell' });
     try {
       return buildCopyCommand(plan, shell, profile.launch.workingDirectory !== null);

@@ -113,6 +113,8 @@ export class ClaudeCodeAdapter implements AppAdapter {
   readonly supportsCopyCommand = true;
   readonly credentialVariables = CLAUDE_CREDENTIAL_OVERRIDE_VARS;
   readonly providerVariables = CLAUDE_PROVIDER_SWITCHES;
+  readonly honorsBrowserVariable = true;
+  readonly desktopCompanion = 'claude-desktop';
 
   reservedDirectories(system: SystemContext): string[] {
     return [claudeCodeDefaultConfigDir(system)];

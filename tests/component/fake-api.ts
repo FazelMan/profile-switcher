@@ -26,6 +26,8 @@ export const claudeCodeApp: AppSummary = {
   supportsCopyCommand: true,
   copyCommandShells: ['posix', 'fish'],
   experimental: null,
+  signInBrowser: true,
+  desktopCompanion: { appId: 'claude-desktop', displayName: 'Claude Desktop', available: false },
   detection: {
     status: 'found',
     executablePath: '/usr/bin/claude',
@@ -48,6 +50,8 @@ export const claudeDesktopApp: AppSummary = {
   supportsVerification: false,
   supportsCopyCommand: false,
   copyCommandShells: [],
+  signInBrowser: false,
+  desktopCompanion: null,
   experimental: {
     feature: 'claudeDesktopIsolation',
     enabled: false,
@@ -116,6 +120,15 @@ export function makeSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       credentialOverrideVariables: [],
       providerOverrideVariables: [],
       terminals: ['auto', 'xterm'],
+      browsers: {
+        installed: [
+          { id: 'chrome', name: 'Google Chrome' },
+          { id: 'firefox', name: 'Firefox' },
+        ],
+        defaultId: 'chrome',
+        resolved: { id: 'chrome', name: 'Google Chrome' },
+        supported: true,
+      },
     },
     profiles: [],
     apps: [claudeCodeApp, claudeDesktopApp],
