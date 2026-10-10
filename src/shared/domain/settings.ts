@@ -1,11 +1,39 @@
 import { z } from 'zod';
+import { appIdSchema } from './profile';
 
 export const THEMES = ['system', 'light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
 
 /** Locales with a complete catalog. Add a locale here once it is translated. */
-export const LANGUAGES = ['en'] as const;
+export const LANGUAGES = ['en', 'fa'] as const;
 export type Language = (typeof LANGUAGES)[number];
+
+/** Languages written right to left. */
+export const RTL_LANGUAGES: readonly Language[] = ['fa'];
+
+/**
+ * What launching a profile does when other profiles of the same application
+ * are already running:
+ * - `concurrent`: start it alongside them. Nothing else is touched.
+ * - `switch`: offer to close the other profiles first. They are closed only
+ *   after the user confirms, and only by asking them to quit normally.
+ */
+export const LAUNCH_MODES = ['concurrent', 'switch'] as const;
+export type LaunchMode = (typeof LAUNCH_MODES)[number];
+export const DEFAULT_LAUNCH_MODE: LaunchMode = 'concurrent';
+
+/**
+ * Features that rely on undocumented application behavior. They are off by
+ * default and the UI explains the risks before they can be turned on.
+ */
+export const experimentalSettingsSchema = z
+  .object({
+    /** Separate Claude Desktop profiles through Chromium's --user-data-dir option. */
+    claudeDesktopIsolation: z.boolean(),
+  })
+  .strict();
+export type ExperimentalSettings = z.infer<typeof experimentalSettingsSchema>;
+export type ExperimentalFeature = keyof ExperimentalSettings;
 
 /**
  * What the primary action does for command-line integrations such as
@@ -42,6 +70,11 @@ export const settingsSchema = z
     language: z.enum(LANGUAGES),
     cliLaunchBehavior: z.enum(CLI_LAUNCH_BEHAVIORS),
     preferredTerminal: z.enum(TERMINAL_IDS),
+    /** Per application ID. Applications without an entry use DEFAULT_LAUNCH_MODE. */
+    launchModes: z
+      .record(appIdSchema, z.enum(LAUNCH_MODES))
+      .refine((modes) => Object.keys(modes).length <= 32, 'Too many launch modes'),
+    experimental: experimentalSettingsSchema,
   })
   .strict();
 export type Settings = z.infer<typeof settingsSchema>;
@@ -51,7 +84,19 @@ export const DEFAULT_SETTINGS: Settings = {
   language: 'en',
   cliLaunchBehavior: 'open-terminal',
   preferredTerminal: 'auto',
+  launchModes: {},
+  experimental: { claudeDesktopIsolation: false },
 };
 
+export function launchModeFor(settings: Settings, appId: string): LaunchMode {
+  return Object.hasOwn(settings.launchModes, appId)
+    ? (settings.launchModes[appId] ?? DEFAULT_LAUNCH_MODE)
+    : DEFAULT_LAUNCH_MODE;
+}
+
+/**
+ * `launchModes` entries are merged into the stored map; every other field
+ * replaces the stored value.
+ */
 export const settingsPatchSchema = settingsSchema.partial().strict();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;

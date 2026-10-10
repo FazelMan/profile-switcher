@@ -34,9 +34,15 @@ or both side by side, with one click. Everything stays on your computer.
 - **Profiles with their own configuration folder.** For Claude Code, each
   profile runs with its own `CLAUDE_CONFIG_DIR`, the mechanism Anthropic
   documents for staying signed in to several accounts.
-- **Run profiles concurrently.** Launch Personal, then Work, without closing
-  Personal. Each launch is independent; Profile Switcher never closes,
-  replaces, or signals a running profile.
+- **Run profiles side by side, or switch.** By default (**Concurrent**),
+  launching Work leaves Personal running; each launch is independent. In
+  **Switch** mode (chosen per application in Settings), launching a profile
+  first lists the other running profiles of that application and closes them
+  only after you confirm — by asking them to quit normally, never by force.
+- **Experimental: separate Claude Desktop profiles.** Off by default. When you
+  turn it on, a Claude Desktop profile can have its own data folder, so several
+  accounts can run side by side. It relies on an undocumented option and is
+  labeled as such everywhere; see [below](#supported-applications-and-systems).
 - **Honest status.** Every profile shows whether isolation is supported,
   needs verification, or is unsupported — computed from what is actually
   installed — plus what is and is not guaranteed. A profile is shown as
@@ -47,18 +53,25 @@ or both side by side, with one click. Everything stays on your computer.
   override a profile's sign-in are removed from launched profiles by default.
   Profile Switcher never stores passwords, tokens, or cookies.
 - **Local-first.** No account, backend, telemetry, analytics, or cloud sync.
+- **English and Persian (فارسی).** The Persian interface is fully translated
+  and laid out right to left. A new installation starts in the system language
+  when it is one of these; change it any time in Settings.
 
 <p>
   <img src="docs/screenshots/first-run.png" alt="First-run screen offering Personal and Work templates" width="49%">
   <img src="docs/screenshots/profile-details-running.png" alt="Profile details with verification result and running instance" width="49%">
 </p>
+<p>
+  <img src="docs/screenshots/switch-confirm.png" alt="Switch mode asking before it closes the running Personal profile" width="49%">
+  <img src="docs/screenshots/dashboard-fa.png" alt="The dashboard in Persian, laid out right to left" width="49%">
+</p>
 
 ## Supported applications and systems
 
-| Application    | macOS (arm64, x64)            | Windows x64                   | Linux x64                     |
-| -------------- | ----------------------------- | ----------------------------- | ----------------------------- |
-| Claude Code    | Isolated, concurrent profiles | Isolated, concurrent profiles | Isolated, concurrent profiles |
-| Claude Desktop | Shared launch only            | Shared launch only            | Not available                 |
+| Application    | macOS (arm64, x64)                                         | Windows x64                                                | Linux x64                     |
+| -------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------- |
+| Claude Code    | Isolated, concurrent profiles                              | Isolated, concurrent profiles                              | Isolated, concurrent profiles |
+| Claude Desktop | Shared launch; separate profiles **experimental** (opt-in) | Shared launch; separate profiles **experimental** (opt-in) | Not available                 |
 
 - **Claude Code** isolation uses Anthropic's documented `CLAUDE_CONFIG_DIR`.
   With Claude Code 2.1.296 on Linux, this project confirmed that the CLI
@@ -67,8 +80,17 @@ or both side by side, with one click. Everything stays on your computer.
   and macOS/Windows on real devices, are not yet verified by this project (see
   the [manual test plan](docs/manual-test-plan.md)).
 - **Claude Desktop** has no documented way to run separate accounts or
-  concurrent instances, so Profile Switcher does not attempt it. It offers a
-  clearly labeled **Open (shared)** action that opens the app normally.
+  concurrent instances. By default Profile Switcher only offers a clearly
+  labeled **Open (shared)** action that opens the app normally. With
+  **Settings → Experimental → Separate Claude Desktop profiles** turned on, a
+  Claude Desktop profile with its own folder starts the app with Chromium's
+  `--user-data-dir=<folder>` option. Anthropic does not document or support
+  this: an update may break it, a browser sign-in may finish in another
+  profile's window (the `claude://` link reaches only one running instance),
+  and Profile Switcher cannot see which account a window uses. Such profiles
+  show **Needs verification** until you check them yourself and record that in
+  Details; the record is tied to the installed Claude Desktop version. Profile
+  Switcher never reads or changes anything inside the folder.
 
 Details, evidence, and what is not guaranteed: **[docs/compatibility.md](docs/compatibility.md)**.
 Future integrations (Codex CLI, Gemini CLI, Cursor, …) plug into the same
@@ -109,7 +131,12 @@ You also need the application you want to launch, for example
 2. **Launch** a profile. A terminal window opens running Claude Code with that
    profile's folder. Run `/login` and sign in with the account for that
    profile. You only need to do this once per profile.
-3. **Launch another profile** at any time; both keep running.
+3. **Launch another profile** at any time; both keep running. If you prefer
+   one profile at a time, choose **Switch** for that application in
+   **Settings → Running several profiles**: launching then offers to close the
+   other running profiles first (**Close and open**, **Open alongside**, or
+   **Cancel**). Only profiles Profile Switcher started and still recognizes
+   are closed, and only after you confirm.
 4. **Details** shows the profile's folder, what is guaranteed, what is not,
    running instances, and **Verify**.
 5. **Copy command** gives you a command to paste into your own terminal
@@ -129,10 +156,10 @@ Profile options:
 Deleting a profile removes it from Profile Switcher only. Its folder — and any
 sign-in stored there — stays on disk, and the confirmation shows where.
 
-Settings: theme (system/light/dark), language (English; more can be
-contributed), primary action for command-line apps (open terminal or copy
-command), preferred terminal, application detection, and version/license
-information.
+Settings: theme (system/light/dark), language (English or فارسی), primary
+action for command-line apps (open terminal or copy command), preferred
+terminal, launch mode per application (Concurrent or Switch), experimental
+features, application detection, and version/license information.
 
 ## Local data
 
@@ -162,6 +189,11 @@ from profile names.
 - Applications are started without a shell, from argument vectors. Profile
   names and descriptions are never part of a command. On Linux, launched
   processes inherit no Profile Switcher file descriptors.
+- Profile Switcher closes another process only in Switch mode, only after you
+  confirmed the exact instances, and only if each is still identified as the
+  application it launched for another profile. It asks them to quit normally
+  (SIGTERM on macOS/Linux, `taskkill` without `/F` on Windows) and never
+  forces; a process that does not quit is left running and reported.
 - Profile Switcher never reads credential stores, keychains, browser data, or
   application databases, and never copies sign-in data between profiles.
 - External links are limited to a fixed allow-list of HTTPS URLs.
@@ -277,8 +309,11 @@ installers are unsigned, and the release notes say so.
 
 ## Known limitations
 
-- Claude Desktop: no separate accounts or concurrent instances (no documented
-  mechanism). Linux has no official Claude Desktop build.
+- Claude Desktop: separate profiles are experimental and rest on an
+  undocumented option (see above); they have not been verified on real devices
+  by this project. Linux has no official Claude Desktop build.
+- Switch mode on Windows cannot close Claude Code running in a console window
+  (Windows only allows forcing those); you are told to close it yourself.
 - Claude Code Console sign-ins made without an API key are stored outside the
   configuration folder and are shared between profiles (Anthropic-documented).
 - Project files (`.claude/`, `CLAUDE.md`) and organization-managed settings
@@ -291,7 +326,10 @@ installers are unsigned, and the release notes say so.
 - macOS and Windows have not yet been verified on real devices by this project
   (see [docs/compatibility.md](docs/compatibility.md)); Windows ARM64 and Linux
   ARM64 are not built.
-- English is the only language so far.
+- Interface languages: English and Persian. Diagnostics text stays in English
+  so it can be pasted into bug reports.
+- The bundled Persian typeface is Vazirmatn (SIL Open Font License 1.1); its
+  license ships with the app under `resources/licenses/`.
 
 ## Contributing and license
 

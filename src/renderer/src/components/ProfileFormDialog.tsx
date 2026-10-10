@@ -1,5 +1,5 @@
 import { useId, useMemo, useState, type FormEvent } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, TriangleAlert } from 'lucide-react';
 import type { AppError } from '@shared/domain/errors';
 import {
   DESCRIPTION_MAX_LENGTH,
@@ -241,7 +241,11 @@ export function ProfileFormDialog({ mode, onClose }: { mode: ProfileFormMode; on
                       ? format(ui.form.isolationDocumented, {
                           mechanism: message(candidate.mechanism),
                         })
-                      : ui.form.isolationNotDocumented}
+                      : candidate.experimental?.enabled
+                        ? format(ui.form.isolationDocumented, {
+                            mechanism: message(candidate.experimental.mechanism),
+                          })
+                        : ui.form.isolationNotDocumented}
                   </span>
                   <span className="choice-meta">
                     {!candidate.platformSupported
@@ -325,6 +329,13 @@ export function ProfileFormDialog({ mode, onClose }: { mode: ProfileFormMode; on
                   </span>
                 </label>
               ))}
+              {app?.experimental?.enabled &&
+                app.experimental.storageKinds.includes(storageKind) && (
+                  <div className="callout tone-warn" data-testid="experimental-storage-warning">
+                    <TriangleAlert className="icon" aria-hidden="true" />
+                    <p>{ui.form.experimentalStorage}</p>
+                  </div>
+                )}
               {storageKind === 'custom' && (
                 <div className="nested">
                   <div className="path-picker">

@@ -2,7 +2,7 @@
   "name": "profile-switcher",
   "productName": "Profile Switcher",
   "desktopName": "profile-switcher.desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A cross-platform desktop app to switch between isolated profiles for AI coding tools and developer applications.",
   "license": "MIT",
   "author": {
@@ -48,6 +48,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@fontsource-variable/vazirmatn": "5.3.0",
     "@playwright/test": "1.64.0",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",

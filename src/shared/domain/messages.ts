@@ -37,6 +37,20 @@ export const MESSAGE_CODES = [
   'compat.claudeDesktop.guidance.switchInApp',
   'compat.claudeDesktop.guidance.install',
   'compat.claudeDesktop.unsupportedPlatform.summary',
+  'compat.claudeDesktop.guidance.enableExperimental',
+  // Claude Desktop, experimental separate profiles
+  'compat.claudeDesktop.experimental.summary',
+  'compat.claudeDesktop.experimental.checkedSummary',
+  'compat.claudeDesktop.experimental.versionChanged',
+  'compat.claudeDesktop.experimental.disabled.summary',
+  'compat.claudeDesktop.experimental.guarantee.folder',
+  'compat.claudeDesktop.experimental.guarantee.untouched',
+  'compat.claudeDesktop.experimental.limitation.undocumented',
+  'compat.claudeDesktop.experimental.limitation.signInCallback',
+  'compat.claudeDesktop.experimental.limitation.notVerifiable',
+  'compat.claudeDesktop.experimental.limitation.sharedSystem',
+  'compat.claudeDesktop.experimental.guidance.signInOneAtATime',
+  'compat.claudeDesktop.experimental.guidance.check',
   // Generic compatibility
   'compat.appNotFound.summary',
   'compat.unknownApp.summary',
@@ -50,10 +64,12 @@ export const MESSAGE_CODES = [
   // Isolation mechanism descriptions
   'mechanism.claudeCode',
   'mechanism.claudeDesktop',
+  'mechanism.claudeDesktop.experimental',
   // Launch notes
   'launch.note.terminalOpened',
   'launch.note.processStarted',
   'launch.note.sharedLaunch',
+  'launch.note.experimentalLaunch',
   'launch.note.notProofOfSignIn',
   // Notices
   'notice.metadataRecoveredFromBackup',

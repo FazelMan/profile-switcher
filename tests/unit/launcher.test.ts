@@ -153,7 +153,7 @@ describe('Launcher on Linux', () => {
   it('does not launch desktop apps on Linux', async () => {
     await expect(
       new Launcher(fakeSystem({ files }), '/l', nullLogger).launch(
-        { type: 'desktop', target: '/opt/x', isolation: 'shared' },
+        { type: 'desktop', target: '/opt/x', args: [], marker: null, isolation: 'shared' },
         context,
       ),
     ).rejects.toMatchObject({ appError: { code: 'APP_UNSUPPORTED_PLATFORM' } });
@@ -217,7 +217,13 @@ describe.skipIf(process.platform === 'win32')('Launcher on macOS', () => {
     const runner = fakeRunner(() => ({ exitCode: 0 }));
     const system = fakeSystem({ platform: 'darwin', files, runner });
     const report = await new Launcher(system, launchersDir, nullLogger).launch(
-      { type: 'desktop', target: '/Applications/Claude.app', isolation: 'shared' },
+      {
+        type: 'desktop',
+        target: '/Applications/Claude.app',
+        args: [],
+        marker: null,
+        isolation: 'shared',
+      },
       context,
     );
     expect(runner.calls[0]?.args).toEqual(['-a', '/Applications/Claude.app']);
@@ -283,5 +289,88 @@ describe('Launcher on Windows', () => {
         context,
       ),
     ).rejects.toMatchObject({ appError: { code: 'EXECUTABLE_INVALID' } });
+  });
+});
+
+describe('Launcher for experimental Claude Desktop profiles', () => {
+  const marker =
+    '--user-data-dir=/Users/ana/Library/Application Support/PS/profiles/claude-desktop/work';
+
+  it('macOS: starts a separate instance through `open -n` with the folder as the last argument', async () => {
+    const runner = fakeRunner(() => ({ exitCode: 0 }));
+    const system = fakeSystem({ platform: 'darwin', runner });
+    const report = await new Launcher(system, '/l', nullLogger).launch(
+      {
+        type: 'desktop',
+        target: '/Applications/Claude.app',
+        args: [marker],
+        marker,
+        isolation: 'experimental',
+      },
+      context,
+    );
+    expect(runner.calls[0]?.file).toBe('/usr/bin/open');
+    expect(runner.calls[0]?.args).toEqual([
+      '-n',
+      '-a',
+      '/Applications/Claude.app',
+      '--args',
+      marker,
+    ]);
+    expect(report).toMatchObject({ tracking: 'marker', pid: null, isolation: 'experimental' });
+    expect(report.notes.map((n) => n.code)).toContain('launch.note.experimentalLaunch');
+    expect(report.notes.map((n) => n.code)).not.toContain('launch.note.sharedLaunch');
+  });
+
+  it('Windows: starts the executable with the folder argument and finds the app by it', async () => {
+    const spawner = fakeSpawner();
+    const system = fakeSystem({ platform: 'win32', homeDir: 'C:\\Users\\ana', spawner });
+    const winMarker = '--user-data-dir=C:\\Users\\ana\\AppData\\Local\\PS\\profiles\\work';
+    const report = await new Launcher(system, 'C:\\l', nullLogger).launch(
+      {
+        type: 'desktop',
+        target: 'C:\\Users\\ana\\AppData\\Local\\AnthropicClaude\\claude.exe',
+        args: [winMarker],
+        marker: winMarker,
+        isolation: 'experimental',
+      },
+      { ...context, onExit: () => undefined },
+    );
+    expect(spawner.calls[0]).toMatchObject({
+      file: 'C:\\Users\\ana\\AppData\\Local\\AnthropicClaude\\claude.exe',
+      args: [winMarker],
+      cwd: 'C:\\Users\\ana\\AppData\\Local\\AnthropicClaude',
+    });
+    // The launcher stub's own PID is not the application's.
+    expect(report).toMatchObject({ tracking: 'marker', pid: null });
+  });
+
+  it('refuses arguments with control characters and markers that are not the last argument', async () => {
+    const system = fakeSystem({ platform: 'darwin', runner: fakeRunner() });
+    const launcher = new Launcher(system, '/l', nullLogger);
+    await expect(
+      launcher.launch(
+        {
+          type: 'desktop',
+          target: '/Applications/Claude.app',
+          args: ['--user-data-dir=/x\n--evil'],
+          marker: '--user-data-dir=/x\n--evil',
+          isolation: 'experimental',
+        },
+        context,
+      ),
+    ).rejects.toMatchObject({ appError: { code: 'EXECUTABLE_INVALID' } });
+    await expect(
+      launcher.launch(
+        {
+          type: 'desktop',
+          target: '/Applications/Claude.app',
+          args: [marker, '--other'],
+          marker,
+          isolation: 'experimental',
+        },
+        context,
+      ),
+    ).rejects.toMatchObject({ appError: { code: 'INTERNAL_ERROR' } });
   });
 });

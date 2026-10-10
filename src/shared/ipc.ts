@@ -35,6 +35,7 @@ export const IPC_CHANNELS = {
   openLogsDirectory: 'diagnostics:open-logs',
   openLink: 'links:open',
   getRuntime: 'runtime:get',
+  setManualCheck: 'profiles:set-manual-check',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -86,9 +87,12 @@ export interface Snapshot {
  *   application (macOS/Linux terminals), so the real process can be found.
  * - `child`: Profile Switcher started the application process directly and
  *   holds its handle (Windows console programs).
+ * - `marker`: the application was started with a unique final argument (its
+ *   profile's data folder), and its main process is found by that argument
+ *   (desktop applications started through macOS `open` or a launcher stub).
  * - `none`: the process cannot be followed reliably (e.g. macOS `open`).
  */
-export type ProcessTracking = 'pid-file' | 'child' | 'none';
+export type ProcessTracking = 'pid-file' | 'child' | 'marker' | 'none';
 
 /**
  * Observed state of one launched instance. `running` is reported only when a
@@ -115,6 +119,8 @@ export type RuntimeSnapshot = Record<string, InstanceStatus[]>;
 
 export interface LaunchReport {
   launchId: string;
+  /** Profiles whose instances were closed first, at the user's request (Switch mode). */
+  closedProfileIds: string[];
   tracking: ProcessTracking;
   method: LaunchMethod;
   isolation: IsolationLevel;
@@ -157,10 +163,36 @@ export interface DeleteResult {
   retainedDirectory: string | null;
 }
 
-export interface LaunchResult {
-  snapshot: Snapshot;
-  report: LaunchReport;
+/** A running instance of another profile that Switch mode would close. */
+export interface SwitchCandidate {
+  profileId: string;
+  launchId: string;
+  pid: number;
 }
+
+/**
+ * What to do about other running profiles of the same application:
+ * - absent: follow the application's launch mode; in Switch mode, return
+ *   `confirm-switch` instead of launching when others are running.
+ * - `keep`: launch alongside them.
+ * - `close`: ask exactly these instances to quit, wait for them to exit,
+ *   then launch. Instances not listed are never touched.
+ */
+export type SwitchDecision = { action: 'keep' } | { action: 'close'; launchIds: string[] };
+
+export interface LaunchRequest {
+  switch?: SwitchDecision;
+}
+
+export type LaunchResult =
+  | { kind: 'launched'; snapshot: Snapshot; report: LaunchReport }
+  | {
+      kind: 'confirm-switch';
+      /** Confirmed running instances of other profiles of the same application. */
+      running: SwitchCandidate[];
+      /** Other profiles of the same application that may be open but cannot be closed reliably. */
+      untrackedProfileIds: string[];
+    };
 
 export interface CreateResult {
   snapshot: Snapshot;
@@ -174,7 +206,9 @@ export interface ProfileSwitcherApi {
   createProfile(input: CreateProfileInput): Promise<Result<CreateResult>>;
   updateProfile(input: UpdateProfileInput): Promise<Result<Snapshot>>;
   deleteProfile(id: string): Promise<Result<DeleteResult>>;
-  launchProfile(id: string): Promise<Result<LaunchResult>>;
+  launchProfile(id: string, request: LaunchRequest): Promise<Result<LaunchResult>>;
+  /** Records (true) or clears (false) the user's own check of an experimental profile. */
+  setManualCheck(id: string, checked: boolean): Promise<Result<Snapshot>>;
   verifyProfile(id: string): Promise<Result<VerificationReport>>;
   openProfileDirectory(id: string): Promise<Result<null>>;
   copyLaunchCommand(id: string, shell: CommandShell): Promise<Result<{ command: string }>>;

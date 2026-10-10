@@ -18,8 +18,10 @@ import { createIpcHandlers, type DesktopIntegration } from './ipc/handlers';
 import { createSenderValidator, registerIpcHandlers, type IpcMainLike } from './ipc/register';
 import { Launcher } from './launch/launcher';
 import { buildApplicationMenu } from './menu';
+import { fill, languageFromSystem, nativeStrings } from './native-strings';
 import { resolveAppPaths } from './paths';
 import { ProfileService } from './profiles/profile-service';
+import { createNodeQuitRequester, ProcessCloser } from './runtime/process-closer';
 import { ProcessTracker } from './runtime/process-tracker';
 import { MetadataStore } from './storage/metadata-store';
 import { createNodeSystemContext } from './system';
@@ -65,7 +67,12 @@ async function bootstrap(logger: Logger): Promise<void> {
   // Profile Switcher makes no network requests of its own, so turn it off.
   session.defaultSession.setSpellCheckerEnabled(false);
 
-  const store = new MetadataStore({ filePath: paths.metadataFile, logger });
+  // A brand-new installation starts in the OS's language when it is supported.
+  const store = new MetadataStore({
+    filePath: paths.metadataFile,
+    logger,
+    initialSettings: { language: languageFromSystem(app.getPreferredSystemLanguages()) },
+  });
   const registry = createDefaultRegistry();
   const launcher = new Launcher(system, paths.launchersDir, logger);
   const service = new ProfileService({
@@ -75,6 +82,11 @@ async function bootstrap(logger: Logger): Promise<void> {
     paths,
     launcher,
     tracker: new ProcessTracker(system, paths.runtimeDir, logger),
+    closer: new ProcessCloser({
+      requestQuit: createNodeQuitRequester(system.platform, system.runner),
+      processes: system.processes,
+      logger,
+    }),
     logger,
     randomBytes: (size) => randomBytes(size),
     appInfo: {
@@ -88,12 +100,21 @@ async function bootstrap(logger: Logger): Promise<void> {
   });
   await service.initialize();
   nativeTheme.themeSource = service.settings().theme;
+  const applyMenu = () =>
+    Menu.setApplicationMenu(
+      buildApplicationMenu({
+        isPackaged: app.isPackaged,
+        strings: nativeStrings(service.settings().language),
+        appName: APP_IDENTITY.productName,
+      }),
+    );
 
   const desktop: DesktopIntegration = {
     async chooseDirectory(purpose) {
+      const strings = nativeStrings(service.settings().language).dialogs;
       const options: Electron.OpenDialogOptions = {
         title:
-          purpose === 'profile-data' ? 'Choose a profile folder' : 'Choose a working directory',
+          purpose === 'profile-data' ? strings.chooseProfileFolder : strings.chooseWorkingDirectory,
         properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
       };
       const result = mainWindow
@@ -107,6 +128,7 @@ async function bootstrap(logger: Logger): Promise<void> {
     applyTheme: (theme) => {
       nativeTheme.themeSource = theme;
     },
+    applyLanguage: () => applyMenu(),
   };
 
   registerIpcHandlers({
@@ -120,7 +142,7 @@ async function bootstrap(logger: Logger): Promise<void> {
     logger,
   });
 
-  Menu.setApplicationMenu(buildApplicationMenu({ isPackaged: app.isPackaged }));
+  applyMenu();
   // Every WebContents (the main window and anything Chromium creates later)
   // gets the same navigation, pop-up, and <webview> restrictions.
   app.on('web-contents-created', (_event, contents) => hardenWebContents(contents, location));
@@ -163,9 +185,10 @@ if (!app.requestSingleInstanceLock()) {
     .catch(async (error: unknown) => {
       logger.error('app.bootstrap-failed', { error });
       await logger.flush();
+      const strings = nativeStrings(languageFromSystem(app.getPreferredSystemLanguages())).dialogs;
       dialog.showErrorBox(
-        `${APP_IDENTITY.productName} could not start`,
-        `Profile Switcher failed to initialize its local data. Details were written to the log folder:\n${paths.logsDir}`,
+        fill(strings.startupFailedTitle, { app: APP_IDENTITY.productName }),
+        fill(strings.startupFailedBody, { path: paths.logsDir }),
       );
       app.exit(1);
     });

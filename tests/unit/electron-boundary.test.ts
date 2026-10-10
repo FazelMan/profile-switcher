@@ -39,6 +39,7 @@ describe('preload bridge', () => {
         'openLogsDirectory',
         'openLink',
         'getRuntime',
+        'setManualCheck',
       ].sort(),
     );
     expect(Object.values(api).every((value) => typeof value === 'function')).toBe(true);
@@ -48,9 +49,9 @@ describe('preload bridge', () => {
   it('maps each method to its fixed channel', async () => {
     await import('../../src/preload/index');
     const api = exposed.profileSwitcher as Record<string, (...args: unknown[]) => Promise<unknown>>;
-    await api.launchProfile!('work-abc');
+    await api.launchProfile!('work-abc', {});
     await api.copyLaunchCommand!('work-abc', 'posix');
-    expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.launchProfile, 'work-abc');
+    expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.launchProfile, 'work-abc', {});
     expect(invoke).toHaveBeenNthCalledWith(2, IPC_CHANNELS.copyLaunchCommand, 'work-abc', 'posix');
   });
 

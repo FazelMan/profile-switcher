@@ -1,5 +1,6 @@
 import type { Message } from './messages';
 import type { IsolationLevel, StorageKind } from './profile';
+import type { ExperimentalFeature } from './settings';
 
 /**
  * Integration status for a profile on the current machine. Computed by the
@@ -7,12 +8,15 @@ import type { IsolationLevel, StorageKind } from './profile';
  *
  * - Supported: the adapter's isolation mechanism is documented by the vendor
  *   and the application was found. (For `app-default` storage this means the
- *   ordinary launch works; the report's `isolation` is then `shared`.)
+ *   ordinary launch works; the report's `isolation` is then `shared`.) An
+ *   experimental integration is Supported only after the user recorded their
+ *   own check for the installed version; its `isolation` stays
+ *   `experimental` and the summary says the check was the user's.
  * - Unsupported: no safe, documented isolation mechanism exists for this
  *   application/OS. A shared launch may still be offered, clearly labeled.
  * - NeedsVerification: the mechanism exists, but something on this machine
- *   (unknown version, credential override variables) means isolation cannot
- *   be assumed until the user verifies it.
+ *   (unknown version, credential override variables, an undocumented
+ *   mechanism) means isolation cannot be assumed until the user verifies it.
  * - ApplicationNotFound: the application was not detected.
  * - ConfigurationError: the profile's own configuration is invalid
  *   (missing directory, unknown application, bad working directory).
@@ -57,13 +61,23 @@ export type AppKind = 'cli' | 'desktop';
 export const COMMAND_SHELLS = ['posix', 'fish', 'powershell', 'cmd'] as const;
 export type CommandShell = (typeof COMMAND_SHELLS)[number];
 
+/** An isolation mechanism that rests on undocumented behavior, offered only on request. */
+export interface ExperimentalSupport {
+  feature: ExperimentalFeature;
+  /** Whether the user turned the feature on in Settings. */
+  enabled: boolean;
+  /** Storage kinds the feature adds while it is on. */
+  storageKinds: StorageKind[];
+  mechanism: Message;
+}
+
 /** Static adapter capabilities plus the latest detection result. */
 export interface AppSummary {
   id: string;
   displayName: string;
   kind: AppKind;
   platformSupported: boolean;
-  /** Storage kinds this adapter accepts for new profiles. */
+  /** Storage kinds this adapter accepts for new profiles, given the current settings. */
   storageKinds: StorageKind[];
   /** Default storage kind proposed when creating a profile. */
   defaultStorageKind: StorageKind;
@@ -75,5 +89,6 @@ export interface AppSummary {
   supportsCopyCommand: boolean;
   /** Shells the copy-command feature can target on this OS. */
   copyCommandShells: CommandShell[];
+  experimental: ExperimentalSupport | null;
   detection: DetectionResult;
 }

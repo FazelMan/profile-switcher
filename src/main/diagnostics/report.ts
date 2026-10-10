@@ -37,7 +37,8 @@ export function buildDiagnosticsReport(
     lines.push(
       `  ${app.id}: ${d.status}${d.version ? ` v${d.version}` : ''}${d.executablePath ? ` at ${d.executablePath}` : ''}` +
         `${d.source ? ` (${d.source})` : ''}; platform supported: ${app.platformSupported ? 'yes' : 'no'}; ` +
-        `documented isolation: ${app.isolationDocumented ? 'yes' : 'no'}`,
+        `documented isolation: ${app.isolationDocumented ? 'yes' : 'no'}` +
+        `${app.experimental ? `; experimental isolation: ${app.experimental.enabled ? 'on' : 'off'}` : ''}`,
     );
   }
   lines.push('');
@@ -56,7 +57,9 @@ export function buildDiagnosticsReport(
       : 'never';
     lines.push(
       `  #${index + 1}: app=${profile.appId} storage=${profile.storage.kind} state=${profile.compatibility.state} ` +
-        `inheritCredentialEnv=${profile.launch.inheritCredentialEnv} lastLaunch=${last}`,
+        `isolation=${profile.compatibility.launch.isolation} ` +
+        `inheritCredentialEnv=${profile.launch.inheritCredentialEnv} lastLaunch=${last}` +
+        `${profile.manualCheck ? ` manualCheck=${profile.manualCheck.appVersion ?? 'unknown-version'}` : ''}`,
     );
   }
   lines.push('');

@@ -6,6 +6,8 @@ import type { ProfileFsState } from '../../src/main/adapters/types';
 import { isAppFailure } from '../../src/shared/domain/errors';
 import { fakeFiles, fakeRunner, fakeSystem } from '../helpers/fake-system';
 
+const NO_EXPERIMENTS = { claudeDesktopIsolation: false };
+
 const adapter = new ClaudeCodeAdapter();
 
 function profile(overrides: Partial<Profile> = {}): Profile {
@@ -20,6 +22,7 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     lastLaunch: null,
+    manualCheck: null,
     ...overrides,
   };
 }
@@ -53,6 +56,7 @@ function evaluate(
     fsState: options.fsState ?? okFs,
     detection: options.detection ?? found,
     system: fakeSystem({ env: { PATH: '/usr/bin', ...options.env } }),
+    experimental: NO_EXPERIMENTS,
   });
 }
 
@@ -196,6 +200,7 @@ describe('ClaudeCodeAdapter.buildLaunchPlan', () => {
       dataDirectory,
       detection: found,
       system,
+      experimental: NO_EXPERIMENTS,
     });
     expect(plan).toEqual({
       type: 'cli',
@@ -224,6 +229,7 @@ describe('ClaudeCodeAdapter.buildLaunchPlan', () => {
       dataDirectory,
       detection: found,
       system,
+      experimental: NO_EXPERIMENTS,
     });
     expect(plan.env.unset).toEqual([]);
     expect(plan.cwd).toBe('/src/app');
@@ -235,6 +241,7 @@ describe('ClaudeCodeAdapter.buildLaunchPlan', () => {
       dataDirectory: null,
       detection: found,
       system,
+      experimental: NO_EXPERIMENTS,
     });
     expect(plan.env.set).toEqual({});
     expect(plan.env.unset).toContain('CLAUDE_CONFIG_DIR');
@@ -248,6 +255,7 @@ describe('ClaudeCodeAdapter.buildLaunchPlan', () => {
         dataDirectory,
         detection: { ...found, status: 'not-found', executablePath: null },
         system,
+        experimental: NO_EXPERIMENTS,
       });
       expect.unreachable();
     } catch (error) {
@@ -268,7 +276,13 @@ describe('ClaudeCodeAdapter.verify', () => {
     });
     return {
       runner,
-      promise: adapter.verify({ profile: profile(), dataDirectory, detection: found, system }),
+      promise: adapter.verify({
+        profile: profile(),
+        dataDirectory,
+        detection: found,
+        system,
+        experimental: NO_EXPERIMENTS,
+      }),
     };
   }
 

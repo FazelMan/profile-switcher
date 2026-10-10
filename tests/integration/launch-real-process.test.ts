@@ -8,6 +8,8 @@ import { createNodeSystemContext } from '../../src/main/system';
 import type { Profile } from '../../src/shared/domain/profile';
 import { nullLogger } from '../helpers/fake-system';
 
+const NO_EXPERIMENTS = { claudeDesktopIsolation: false };
+
 /**
  * Spawns real processes (no mocks) through the production Launcher on Linux,
  * using the stand-in terminal and Claude Code executables from the e2e
@@ -56,8 +58,15 @@ describe.runIf(process.platform === 'linux')('real process launch (Linux)', () =
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       lastLaunch: null,
+      manualCheck: null,
     };
-    const plan = adapter.buildLaunchPlan({ profile, dataDirectory: configDir, detection, system });
+    const plan = adapter.buildLaunchPlan({
+      profile,
+      dataDirectory: configDir,
+      detection,
+      system,
+      experimental: NO_EXPERIMENTS,
+    });
     const report = await new Launcher(system, path.join(dir, 'launchers'), nullLogger).launch(
       plan,
       {
@@ -84,6 +93,7 @@ describe.runIf(process.platform === 'linux')('real process launch (Linux)', () =
       dataDirectory: configDir,
       detection,
       system,
+      experimental: NO_EXPERIMENTS,
     });
     expect(verification.configDirectoryMatches).toBe(true);
     expect(verification.strippedVariables).toEqual([

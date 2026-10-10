@@ -49,6 +49,14 @@ function useResolvedTheme(theme: 'system' | 'light' | 'dark') {
   }, [theme]);
 }
 
+/** Keeps <html lang dir> in step with the active language, for layout and screen readers. */
+function useDocumentLanguage(locale: string, dir: 'ltr' | 'rtl') {
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.documentElement.dir = dir;
+  }, [locale, dir]);
+}
+
 function Notices() {
   const { snapshot } = useController();
   const { message, ui } = useI18n();
@@ -106,7 +114,8 @@ function ShellContent({
   failed: boolean;
   retry(): Promise<void>;
 }) {
-  const { ui } = useI18n();
+  const { ui, locale, dir } = useI18n();
+  useDocumentLanguage(locale, dir);
   const { loadError, snapshot } = useController();
   const nav: Array<{ id: ViewId; label: string; icon: ReactNode }> = [
     {

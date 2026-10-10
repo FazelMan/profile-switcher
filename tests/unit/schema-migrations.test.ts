@@ -19,6 +19,7 @@ function profile(id: string, name: string, overrides: Partial<Profile> = {}): Pr
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     lastLaunch: null,
+    manualCheck: null,
     ...overrides,
   };
 }
@@ -126,5 +127,54 @@ describe('metadataDocumentSchema invariants', () => {
         profiles: [{ ...profile('a-1', 'A'), credentials: 'x' }],
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('migration 1 → 2', () => {
+  it('upgrades a 0.1.x document without changing what existing profiles do', () => {
+    const v1 = {
+      schemaVersion: 1,
+      profiles: [
+        {
+          id: 'work-abc',
+          appId: 'claude-code',
+          name: 'Work',
+          description: '',
+          color: 'blue',
+          storage: { kind: 'managed' },
+          launch: { workingDirectory: null, inheritCredentialEnv: false },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          lastLaunch: {
+            at: '2026-01-02T00:00:00.000Z',
+            outcome: 'started',
+            method: 'terminal',
+            isolation: 'isolated',
+          },
+        },
+      ],
+      settings: {
+        theme: 'dark',
+        language: 'en',
+        cliLaunchBehavior: 'copy-command',
+        preferredTerminal: 'auto',
+      },
+      lastLaunchedProfileId: 'work-abc',
+    };
+    const outcome = migrateDocument(v1);
+    expect(outcome.kind).toBe('migrated');
+    if (outcome.kind !== 'migrated') return;
+    const parsed = metadataDocumentSchema.parse(outcome.document);
+    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.settings).toEqual({
+      theme: 'dark',
+      language: 'en',
+      cliLaunchBehavior: 'copy-command',
+      preferredTerminal: 'auto',
+      launchModes: {},
+      experimental: { claudeDesktopIsolation: false },
+    });
+    expect(parsed.profiles[0]).toMatchObject({ id: 'work-abc', manualCheck: null });
+    expect(parsed.lastLaunchedProfileId).toBe('work-abc');
   });
 });

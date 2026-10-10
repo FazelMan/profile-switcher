@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { nameKey, profileIdSchema, profileSchema } from '@shared/domain/profile';
-import { DEFAULT_SETTINGS, settingsSchema } from '@shared/domain/settings';
+import { DEFAULT_SETTINGS, settingsSchema, type Settings } from '@shared/domain/settings';
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export const metadataDocumentSchema = z
   .object({
@@ -56,11 +56,11 @@ export const metadataDocumentSchema = z
 
 export type MetadataDocument = z.infer<typeof metadataDocumentSchema>;
 
-export function createDefaultDocument(): MetadataDocument {
+export function createDefaultDocument(initialSettings: Partial<Settings> = {}): MetadataDocument {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     profiles: [],
-    settings: { ...DEFAULT_SETTINGS },
+    settings: { ...structuredClone(DEFAULT_SETTINGS), ...initialSettings },
     lastLaunchedProfileId: null,
   };
 }
@@ -74,8 +74,39 @@ export function createDefaultDocument(): MetadataDocument {
 export type Migration = (document: Record<string, unknown>) => Record<string, unknown>;
 export type MigrationTable = Readonly<Record<number, Migration>>;
 
-/** No migrations exist yet: version 1 is the first released schema. */
-export const MIGRATIONS: MigrationTable = {};
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+export const MIGRATIONS: MigrationTable = {
+  /**
+   * 1 → 2 (Profile Switcher 0.2.0): settings gain per-application launch
+   * modes and experimental features (both off), and profiles gain
+   * `manualCheck`. Nothing existing changes meaning.
+   */
+  1: (document) => {
+    const settings = asRecord(document.settings);
+    const profiles = Array.isArray(document.profiles)
+      ? document.profiles.map((entry: unknown) => {
+          const profile = asRecord(entry);
+          return profile ? { manualCheck: null, ...profile } : entry;
+        })
+      : document.profiles;
+    return {
+      ...document,
+      settings: settings
+        ? {
+            launchModes: {},
+            experimental: { claudeDesktopIsolation: false },
+            ...settings,
+          }
+        : document.settings,
+      profiles,
+    };
+  },
+};
 
 export type MigrationOutcome =
   | { kind: 'current'; document: Record<string, unknown> }

@@ -13,15 +13,18 @@ import {
   type Profile,
   type UpdateProfileRequest,
 } from '@shared/domain/profile';
-import type { Settings, SettingsPatch } from '@shared/domain/settings';
+import { launchModeFor, type Settings, type SettingsPatch } from '@shared/domain/settings';
+import type { StorageKind } from '@shared/domain/profile';
 import type {
   AppInfo,
   CommandShell,
   EnvironmentSummary,
   LaunchReport,
+  LaunchRequest,
   ProfileView,
   RuntimeSnapshot,
   Snapshot,
+  SwitchCandidate,
   VerificationReport,
 } from '@shared/ipc';
 import type { AdapterRegistry } from '../adapters/registry';
@@ -38,6 +41,7 @@ import { terminalIdsFor } from '../launch/terminals';
 import { UnsafeValueError } from '../launch/quoting';
 import { ownedRoots, type AppPaths } from '../paths';
 import { isStrictlyInside, isSupportedPlatform, pathApiFor } from '../platform';
+import type { ProcessCloser } from '../runtime/process-closer';
 import type { ProcessTracker } from '../runtime/process-tracker';
 import type { MetadataStore } from '../storage/metadata-store';
 import type { MetadataDocument } from '../storage/schema';
@@ -56,6 +60,7 @@ export interface ProfileServiceDeps {
   paths: AppPaths;
   launcher: Launcher;
   tracker: ProcessTracker;
+  closer: ProcessCloser;
   logger: Logger;
   appInfo: AppInfo;
   randomBytes: (size: number) => Uint8Array;
@@ -72,6 +77,21 @@ function unknownAppReport(appId: string): CompatibilityReport {
     limitations: [],
     guidance: [],
   };
+}
+
+/** Result of a launch request: launched, or Switch mode needs the user's decision first. */
+export type LaunchOutcome =
+  | { kind: 'launched'; report: LaunchReport }
+  | { kind: 'confirm-switch'; running: SwitchCandidate[]; untrackedProfileIds: string[] };
+
+/** Storage kinds an adapter accepts right now, including enabled experimental ones. */
+export function effectiveStorageKinds(adapter: AppAdapter, settings: Settings): StorageKind[] {
+  const kinds: StorageKind[] = [...adapter.storageKinds];
+  const experimental = adapter.experimental;
+  if (experimental && settings.experimental[experimental.feature]) {
+    for (const kind of experimental.storageKinds) if (!kinds.includes(kind)) kinds.push(kind);
+  }
+  return kinds;
 }
 
 export class ProfileService {
@@ -154,7 +174,7 @@ export class ProfileService {
       appInfo: this.deps.appInfo,
       environment,
       profiles,
-      apps: this.deps.registry.list().map((adapter) => this.appSummary(adapter)),
+      apps: this.deps.registry.list().map((adapter) => this.appSummary(adapter, doc.settings)),
       settings: doc.settings,
       notices: this.notices,
       readOnly: this.deps.store.isReadOnly,
@@ -185,7 +205,9 @@ export class ProfileService {
     );
   }
 
-  private appSummary(adapter: AppAdapter): AppSummary {
+  private appSummary(adapter: AppAdapter, settings: Settings): AppSummary {
+    const experimental = adapter.experimental;
+    const experimentalOn = experimental ? settings.experimental[experimental.feature] : false;
     return {
       id: adapter.id,
       displayName: adapter.displayName,
@@ -193,14 +215,25 @@ export class ProfileService {
       platformSupported: (adapter.supportedPlatforms as readonly string[]).includes(
         this.deps.system.platform,
       ),
-      storageKinds: [...adapter.storageKinds],
-      defaultStorageKind: adapter.defaultStorageKind,
+      storageKinds: effectiveStorageKinds(adapter, settings),
+      defaultStorageKind:
+        experimental && experimentalOn
+          ? (experimental.storageKinds[0] ?? adapter.defaultStorageKind)
+          : adapter.defaultStorageKind,
       isolationDocumented: adapter.isolationDocumented,
       mechanism: adapter.mechanism,
       supportsWorkingDirectory: adapter.supportsWorkingDirectory,
       supportsVerification: adapter.supportsVerification,
       supportsCopyCommand: adapter.supportsCopyCommand,
       copyCommandShells: adapter.shellsFor?.(this.deps.system.platform) ?? [],
+      experimental: experimental
+        ? {
+            feature: experimental.feature,
+            enabled: experimentalOn,
+            storageKinds: [...experimental.storageKinds],
+            mechanism: experimental.mechanism,
+          }
+        : null,
       detection: this.detection(adapter.id),
     };
   }
@@ -259,6 +292,7 @@ export class ProfileService {
       fsState,
       detection: this.detection(profile.appId),
       system: this.deps.system,
+      experimental: this.settings().experimental,
     });
     return { dataDirectory, report };
   }
@@ -316,7 +350,7 @@ export class ProfileService {
     if (!(adapter.supportedPlatforms as readonly string[]).includes(system.platform)) {
       throw new AppFailure('APP_UNSUPPORTED_PLATFORM', { app: adapter.displayName });
     }
-    if (!(adapter.storageKinds as readonly string[]).includes(input.storage.kind)) {
+    if (!effectiveStorageKinds(adapter, this.settings()).includes(input.storage.kind)) {
       throw new AppFailure('STORAGE_KIND_NOT_SUPPORTED', { app: adapter.displayName });
     }
 
@@ -398,6 +432,7 @@ export class ProfileService {
           createdAt: timestamp,
           updatedAt: timestamp,
           lastLaunch: null,
+          manualCheck: null,
         };
         newId = id;
         return { ...doc, profiles: [...doc.profiles, profile] };
@@ -467,7 +502,43 @@ export class ProfileService {
   }
 
   async updateSettings(patch: SettingsPatch): Promise<void> {
-    await this.deps.store.update((doc) => ({ ...doc, settings: { ...doc.settings, ...patch } }));
+    if (patch.launchModes) {
+      for (const appId of Object.keys(patch.launchModes)) {
+        if (!this.deps.registry.get(appId))
+          throw new AppFailure('VALIDATION_FAILED', { field: 'launchModes' });
+      }
+    }
+    await this.deps.store.update((doc) => ({
+      ...doc,
+      settings: {
+        ...doc.settings,
+        ...patch,
+        launchModes: { ...doc.settings.launchModes, ...patch.launchModes },
+      },
+    }));
+    this.deps.logger.info('settings.updated', { fields: Object.keys(patch) });
+  }
+
+  /**
+   * Records (or clears) the user's own check that an experimental profile
+   * keeps its own sign-in. It is tied to the application version detected
+   * now, so an update makes the profile ask for a new check.
+   */
+  async setManualCheck(id: string, checked: boolean): Promise<void> {
+    await this.deps.store.update((doc) => {
+      const profile = this.find(doc, id);
+      const adapter = this.requireAdapter(profile.appId);
+      if (!adapter.experimental || profile.storage.kind === 'app-default')
+        throw new AppFailure('VALIDATION_FAILED', { field: 'manualCheck' });
+      const manualCheck = checked
+        ? { at: this.now().toISOString(), appVersion: this.detection(profile.appId).version }
+        : null;
+      return {
+        ...doc,
+        profiles: doc.profiles.map((p) => (p.id === id ? { ...p, manualCheck } : p)),
+      };
+    });
+    this.deps.logger.info('profile.manual-check', { id, checked });
   }
 
   /** Resolves everything needed to act on a profile and refuses unavailable actions. */
@@ -502,18 +573,102 @@ export class ProfileService {
   }
 
   /**
-   * Launches a new instance of the profile. Launching never stops, signals,
-   * or reuses another profile's (or this profile's) running instances; each
-   * launch is independent and gets its own launch ID and records.
+   * Other profiles of the same application that are running now. Only
+   * instances the tracker has confirmed as the launched application can be
+   * closed; profiles with untracked launches are reported separately.
    */
-  async launch(id: string): Promise<LaunchReport> {
+  private async switchCandidates(
+    profile: Profile,
+  ): Promise<{ running: SwitchCandidate[]; untrackedProfileIds: string[] }> {
+    const siblings = new Set(
+      this.deps.store
+        .current()
+        .profiles.filter((p) => p.appId === profile.appId && p.id !== profile.id)
+        .map((p) => p.id),
+    );
+    const runtime = await this.runtime();
+    const running: SwitchCandidate[] = [];
+    const untracked = new Set<string>();
+    for (const [profileId, instances] of Object.entries(runtime)) {
+      if (!siblings.has(profileId)) continue;
+      for (const instance of instances) {
+        if (instance.state === 'running' && instance.pid !== null)
+          running.push({ profileId, launchId: instance.launchId, pid: instance.pid });
+        else untracked.add(profileId);
+      }
+    }
+    return { running, untrackedProfileIds: [...untracked] };
+  }
+
+  /**
+   * Switch mode: asks exactly the instances the user confirmed to quit, and
+   * waits for them to exit. Each one is re-identified right before it is
+   * asked, must still belong to another profile of the same application, and
+   * is never force-killed. Instances that already exited are skipped.
+   */
+  private async closeForSwitch(profile: Profile, launchIds: readonly string[]): Promise<string[]> {
+    const doc = this.deps.store.current();
+    const targets: Array<{ profileId: string; pid: number }> = [];
+    for (const launchId of new Set(launchIds)) {
+      const tracked = await this.deps.tracker.status(launchId);
+      if (!tracked || tracked.status.state !== 'running' || tracked.status.pid === null) continue;
+      const owner = doc.profiles.find((p) => p.id === tracked.profileId);
+      if (!owner || owner.appId !== profile.appId || owner.id === profile.id) {
+        throw new AppFailure('VALIDATION_FAILED', { field: 'switch' });
+      }
+      targets.push({ profileId: owner.id, pid: tracked.status.pid });
+    }
+    const outcomes = await Promise.all(
+      targets.map(async (target) => ({
+        ...target,
+        ...(await this.deps.closer.close(target.pid)),
+      })),
+    );
+    this.deps.logger.info('switch.closed', {
+      target: profile.id,
+      results: outcomes.map((o) => ({ profileId: o.profileId, pid: o.pid, exited: o.exited })),
+    });
+    const failed = outcomes.filter((o) => !o.exited);
+    if (failed.length > 0) {
+      const names = [...new Set(failed.map((o) => o.profileId))]
+        .map((id) => doc.profiles.find((p) => p.id === id)?.name ?? id)
+        .join(', ');
+      throw new AppFailure('SWITCH_CLOSE_FAILED', { names }, `${failed.length} did not exit`);
+    }
+    return [...new Set(outcomes.map((o) => o.profileId))];
+  }
+
+  /**
+   * Launches a new instance of the profile.
+   *
+   * In Concurrent mode (the default) and with `switch: { action: 'keep' }`,
+   * launching never stops, signals, or reuses any other instance; each launch
+   * is independent and gets its own launch ID and records.
+   *
+   * In Switch mode without a decision, nothing is launched while other
+   * profiles of the same application are running: the caller receives
+   * `confirm-switch` with those instances and asks the user. Only with
+   * `switch: { action: 'close', launchIds }` are exactly those instances
+   * asked to quit (see closeForSwitch) before the launch.
+   */
+  async launch(id: string, request: LaunchRequest = {}): Promise<LaunchOutcome> {
     const { profile, adapter, dataDirectory, detection } = await this.prepare(id);
     const plan = adapter.buildLaunchPlan({
       profile,
       dataDirectory,
       detection,
       system: this.deps.system,
+      experimental: this.settings().experimental,
     });
+
+    let closedProfileIds: string[] = [];
+    if (request.switch?.action === 'close') {
+      closedProfileIds = await this.closeForSwitch(profile, request.switch.launchIds);
+    } else if (!request.switch && launchModeFor(this.settings(), profile.appId) === 'switch') {
+      const candidates = await this.switchCandidates(profile);
+      if (candidates.running.length > 0) return { kind: 'confirm-switch', ...candidates };
+    }
+
     const { tracker, system } = this.deps;
     const launchId = Buffer.from(this.deps.randomBytes(6)).toString('hex');
     const recordPid = plan.type === 'cli' && system.platform !== 'win32';
@@ -533,6 +688,7 @@ export class ProfileService {
           tracking: report.tracking,
           pid: report.pid,
           executable: plan.type === 'cli' ? plan.executable : plan.target,
+          marker: plan.type === 'desktop' ? plan.marker : null,
           expectedEnv: plan.type === 'cli' ? { ...plan.env.set } : {},
         })
         .catch((error: unknown) => this.deps.logger.warn('runtime.register-failed', { error }));
@@ -542,7 +698,7 @@ export class ProfileService {
         method: report.method,
         isolation: report.isolation,
       });
-      return report;
+      return { kind: 'launched', report: { ...report, closedProfileIds } };
     } catch (error) {
       const code = error instanceof AppFailure ? error.appError.code : 'INTERNAL_ERROR';
       await this.recordLaunch(id, {
@@ -567,6 +723,7 @@ export class ProfileService {
       dataDirectory,
       detection,
       system: this.deps.system,
+      experimental: this.settings().experimental,
     });
     // Log the outcome only; account details are never logged or persisted.
     this.deps.logger.info('profile.verified', {
@@ -593,6 +750,7 @@ export class ProfileService {
       dataDirectory,
       detection,
       system: this.deps.system,
+      experimental: this.settings().experimental,
     });
     if (plan.type !== 'cli') throw new AppFailure('VALIDATION_FAILED', { field: 'shell' });
     try {

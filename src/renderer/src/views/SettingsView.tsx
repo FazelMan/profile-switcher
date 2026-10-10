@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { ExternalLink, RefreshCw } from 'lucide-react';
+import { ExternalLink, FlaskConical, RefreshCw, TriangleAlert } from 'lucide-react';
 import {
   CLI_LAUNCH_BEHAVIORS,
   LANGUAGES,
+  LAUNCH_MODES,
+  launchModeFor,
   THEMES,
+  type Language,
   type SettingsPatch,
   type TerminalId,
 } from '@shared/domain/settings';
@@ -21,6 +24,13 @@ export function SettingsView() {
   const [refreshing, setRefreshing] = useState(false);
   if (!snapshot) return null;
   const { settings, readOnly, appInfo, environment } = snapshot;
+  // Launch modes matter only where several profiles of an application can run.
+  const multiProfileApps = snapshot.apps.filter(
+    (app) => app.platformSupported && (app.isolationDocumented || app.experimental?.enabled),
+  );
+  const desktopExperiment = snapshot.apps.some(
+    (app) => app.platformSupported && app.experimental?.feature === 'claudeDesktopIsolation',
+  );
 
   const update = async (patch: SettingsPatch) => {
     const result = await call(() => api.updateSettings(patch));
@@ -65,13 +75,11 @@ export function SettingsView() {
           <select
             id="settings-language"
             value={settings.language}
-            disabled={readOnly || LANGUAGES.length < 2}
-            onChange={(event) =>
-              void update({ language: event.target.value as (typeof LANGUAGES)[number] })
-            }
+            disabled={readOnly}
+            onChange={(event) => void update({ language: event.target.value as Language })}
           >
             {LANGUAGES.map((language) => (
-              <option key={language} value={language}>
+              <option key={language} value={language} lang={language}>
                 {ui.settings.languages[language]}
               </option>
             ))}
@@ -122,6 +130,78 @@ export function SettingsView() {
           </select>
         </div>
       </section>
+
+      {multiProfileApps.length > 0 && (
+        <section className="card settings-section" aria-labelledby="settings-modes">
+          <h2 id="settings-modes">{ui.settings.launchModes}</h2>
+          <p className="field-help">{ui.settings.launchModesHelp}</p>
+          {multiProfileApps.map((app) => (
+            <fieldset key={app.id} className="field">
+              <legend className="app-name">
+                <AppGlyph kind={app.kind} />
+                {app.displayName}
+              </legend>
+              <div className="radio-list">
+                {LAUNCH_MODES.map((mode) => (
+                  <label key={mode} className="radio-row">
+                    <input
+                      type="radio"
+                      name={`launch-mode-${app.id}`}
+                      value={mode}
+                      checked={launchModeFor(settings, app.id) === mode}
+                      disabled={readOnly}
+                      onChange={() => void update({ launchModes: { [app.id]: mode } })}
+                    />
+                    <span>
+                      <span className="radio-title">{ui.settings.modes[mode]}</span>
+                      <span className="field-help">{ui.settings.modeHelp[mode]}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+          {environment.platform === 'win32' && (
+            <p className="field-help">{ui.settings.windowsSwitchNote}</p>
+          )}
+        </section>
+      )}
+
+      {desktopExperiment && (
+        <section className="card settings-section" aria-labelledby="settings-experimental">
+          <h2 id="settings-experimental" className="app-name">
+            <FlaskConical className="icon" aria-hidden="true" />
+            {ui.settings.experimental}
+          </h2>
+          <p className="field-help">{ui.settings.experimentalHelp}</p>
+          <div className="field">
+            <h3>{ui.settings.claudeDesktopIsolation}</h3>
+            <div className="callout tone-warn">
+              <TriangleAlert className="icon" aria-hidden="true" />
+              <p>{ui.settings.claudeDesktopIsolationHelp}</p>
+            </div>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={settings.experimental.claudeDesktopIsolation}
+                disabled={readOnly}
+                onChange={(event) =>
+                  void update({
+                    experimental: {
+                      ...settings.experimental,
+                      claudeDesktopIsolation: event.target.checked,
+                    },
+                  })
+                }
+              />
+              <span>{ui.settings.claudeDesktopIsolationToggle}</span>
+            </label>
+            {settings.experimental.claudeDesktopIsolation && (
+              <p className="field-help">{ui.settings.claudeDesktopIsolationOffNote}</p>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="card settings-section" aria-labelledby="settings-apps">
         <div className="section-header">

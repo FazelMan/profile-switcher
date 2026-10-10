@@ -58,6 +58,8 @@ export interface FileProbe {
   isEmptyDirectory(p: string): Promise<boolean | null>;
   /** Reads at most `maxBytes` of a UTF-8 text file; null when unreadable. */
   readTextFile(p: string, maxBytes: number): Promise<string | null>;
+  /** Names of the entries in a directory; null when it cannot be read. */
+  listDirectory(p: string): Promise<string[] | null>;
 }
 
 export interface RunOptions {
@@ -116,6 +118,25 @@ export interface ProcessInspector {
    * set or the process cannot be read. Other variables are never returned.
    */
   environmentVariable(pid: number, name: string): Promise<string | null | undefined>;
+  /**
+   * PIDs of the current user's processes whose LAST argument is exactly
+   * `marker`, excluding Chromium helper processes (any `--type=` argument).
+   * Used to find a desktop application's main process when it was started
+   * through a launcher (macOS `open`, a Windows launcher stub) whose own PID
+   * is not the application's. Returns null when the process list cannot be
+   * read on this OS.
+   */
+  findByFinalArgument(marker: string): Promise<number[] | null>;
+}
+
+/** Whether a command line, as one string, ends with `marker` as its own argument. */
+export function commandLineEndsWithArgument(commandLine: string, marker: string): boolean {
+  const text = commandLine.trimEnd();
+  let rest: string;
+  if (text.endsWith(` ${marker}`)) rest = text.slice(0, -(marker.length + 1));
+  else if (text.endsWith(` "${marker}"`)) rest = text.slice(0, -(marker.length + 3));
+  else return false;
+  return !/(^|\s)"?--type=/.test(rest);
 }
 
 export interface SystemContext {
@@ -176,6 +197,13 @@ export const nodeFileProbe: FileProbe = {
       } finally {
         await handle.close();
       }
+    } catch {
+      return null;
+    }
+  },
+  async listDirectory(p) {
+    try {
+      return await fs.readdir(p);
     } catch {
       return null;
     }
@@ -319,7 +347,74 @@ export function createNodeProcessInspector(
       }
       return null;
     },
+    async findByFinalArgument(marker) {
+      if (platform === 'linux') return findOnLinux(marker);
+      if (platform === 'darwin') {
+        // -x includes processes without a controlling terminal; ps lists only
+        // the current user's processes unless asked otherwise.
+        const result = await runner.run('/bin/ps', ['-x', '-ww', '-o', 'pid=,command='], {
+          env: {},
+          timeoutMs: 10_000,
+          maxOutputBytes: 8 * 1024 * 1024,
+        });
+        if (result.exitCode !== 0) return null;
+        return parseProcessList(result.stdout, marker);
+      }
+      if (platform === 'win32') {
+        const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+        // Fixed script; no value is interpolated into it. Command lines of
+        // other users' processes are not readable without elevation.
+        const result = await runner.run(
+          `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`,
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }',
+          ],
+          { env: { SystemRoot: systemRoot }, timeoutMs: 15_000, maxOutputBytes: 8 * 1024 * 1024 },
+        );
+        if (result.exitCode !== 0) return null;
+        return parseProcessList(result.stdout, marker);
+      }
+      return null;
+    },
   };
+}
+
+/** Parses `<pid> <command line>` lines and returns the PIDs ending with `marker`. */
+export function parseProcessList(output: string, marker: string): number[] {
+  const pids: number[] = [];
+  for (const line of output.split(/\r\n|\n|\r/)) {
+    const match = /^\s*(\d+)\s+(.*)$/.exec(line);
+    if (!match?.[1] || match[2] === undefined) continue;
+    const pid = Number(match[1]);
+    if (Number.isInteger(pid) && pid > 0 && commandLineEndsWithArgument(match[2], marker))
+      pids.push(pid);
+  }
+  return pids;
+}
+
+async function findOnLinux(marker: string): Promise<number[] | null> {
+  const entries = await fs.readdir('/proc').catch(() => null);
+  if (!entries) return null;
+  const uid = process.getuid?.();
+  const pids: number[] = [];
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue;
+    const pid = Number(entry);
+    try {
+      if (uid !== undefined && (await fs.stat(`/proc/${entry}`)).uid !== uid) continue;
+      const args = (await fs.readFile(`/proc/${entry}/cmdline`))
+        .toString('utf8')
+        .replace(/\0+$/, '')
+        .split('\0');
+      if (args.at(-1) === marker && !args.some((arg) => arg.startsWith('--type='))) pids.push(pid);
+    } catch {
+      // The process exited while the list was being read.
+    }
+  }
+  return pids;
 }
 
 export function createNodeSystemContext(): SystemContext {

@@ -19,6 +19,7 @@ import type { Launcher } from '../../src/main/launch/launcher';
 import { resolveAppPaths, type AppPaths } from '../../src/main/paths';
 import { ProfileService } from '../../src/main/profiles/profile-service';
 import { MetadataStore } from '../../src/main/storage/metadata-store';
+import { ProcessCloser } from '../../src/main/runtime/process-closer';
 import { ProcessTracker } from '../../src/main/runtime/process-tracker';
 import { createRedactor } from '../../src/main/diagnostics/redact';
 import { AppFailure } from '../../src/shared/domain/errors';
@@ -42,6 +43,7 @@ const fakeLauncher = {
     if (launchFailure) throw launchFailure;
     return {
       launchId: context.launchId,
+      closedProfileIds: [],
       tracking: 'none',
       method: 'terminal',
       isolation: plan.isolation,
@@ -82,6 +84,13 @@ async function service(options: { withClaude?: boolean } = {}) {
     paths,
     launcher: fakeLauncher,
     tracker: new ProcessTracker(sys, paths.runtimeDir, nullLogger),
+    closer: new ProcessCloser({
+      requestQuit: async () => {
+        throw new Error('nothing may be closed in these tests');
+      },
+      processes: sys.processes,
+      logger: nullLogger,
+    }),
     logger: nullLogger,
     randomBytes: (n) => randomBytes(n),
     appInfo: {
@@ -316,8 +325,8 @@ describe('launching and verification', () => {
   it('launches with the profile directory and records the outcome', async () => {
     const { svc } = await service();
     const id = await svc.create(input());
-    const report = await svc.launch(id);
-    expect(report.terminal).toBe('Test terminal');
+    const outcome = await svc.launch(id);
+    expect(outcome.kind === 'launched' && outcome.report.terminal).toBe('Test terminal');
     const plan = launches[0]!;
     expect(plan.type).toBe('cli');
     if (plan.type === 'cli') {
@@ -392,6 +401,7 @@ describe('credential hygiene', () => {
       openExternal: vi.fn(async () => undefined),
       writeClipboard: vi.fn(),
       applyTheme: vi.fn(),
+      applyLanguage: vi.fn(),
     };
     const handlers = createIpcHandlers({
       service: svc,
@@ -425,6 +435,7 @@ describe('credential hygiene', () => {
         openExternal: vi.fn(),
         writeClipboard: vi.fn(),
         applyTheme: vi.fn(),
+        applyLanguage: vi.fn(),
       },
       system: sys,
       paths,

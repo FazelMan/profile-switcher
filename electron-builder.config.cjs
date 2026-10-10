@@ -19,6 +19,13 @@ module.exports = {
     buildResources: 'build',
   },
   files: ['out/**', 'package.json', '!**/*.map'],
+  // License of the bundled Vazirmatn font (SIL OFL 1.1 requires shipping it).
+  extraResources: [
+    {
+      from: 'node_modules/@fontsource-variable/vazirmatn/LICENSE',
+      to: 'licenses/Vazirmatn-OFL.txt',
+    },
+  ],
   asar: true,
   artifactName: `${identity.slug}-\${version}-\${os}-\${arch}.\${ext}`,
   publish: null,

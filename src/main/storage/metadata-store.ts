@@ -4,8 +4,10 @@ import { AppFailure } from '@shared/domain/errors';
 import { msg, type Message } from '@shared/domain/messages';
 import type { Logger } from '../diagnostics/logger';
 import { errorCode, writeFileAtomic } from './atomic-write';
+import type { Settings } from '@shared/domain/settings';
 import {
   createDefaultDocument,
+  CURRENT_SCHEMA_VERSION,
   metadataDocumentSchema,
   migrateDocument,
   type MetadataDocument,
@@ -24,6 +26,8 @@ export interface MetadataStoreOptions {
   /** Migration step; defaults to the real migration table. Injectable for tests. */
   migrate?: (raw: unknown) => MigrationOutcome;
   now?: () => Date;
+  /** Settings for a brand-new document, e.g. the language matching the OS. */
+  initialSettings?: Partial<Settings>;
 }
 
 type ReadResult =
@@ -45,6 +49,7 @@ export class MetadataStore {
   private readonly logger: Logger;
   private readonly migrate: (raw: unknown) => MigrationOutcome;
   private readonly now: () => Date;
+  private readonly initialSettings: Partial<Settings>;
   private document: MetadataDocument | null = null;
   private readOnly = false;
   private lock: Promise<unknown> = Promise.resolve();
@@ -55,6 +60,7 @@ export class MetadataStore {
     this.logger = options.logger;
     this.migrate = options.migrate ?? ((raw) => migrateDocument(raw));
     this.now = options.now ?? (() => new Date());
+    this.initialSettings = options.initialSettings ?? {};
   }
 
   get path(): string {
@@ -152,7 +158,7 @@ export class MetadataStore {
       return { document: backup.document, notices, readOnly: false };
     }
 
-    const fresh = createDefaultDocument();
+    const fresh = createDefaultDocument(this.initialSettings);
     this.document = fresh;
     this.readOnly = false;
     await this.persist(fresh, { skipBackup: true });
@@ -202,7 +208,10 @@ export class MetadataStore {
 
   /** Best-effort read of a newer document for display only. */
   private lenientParse(raw: unknown): MetadataDocument | null {
-    const candidate = { ...(raw as Record<string, unknown>), schemaVersion: 1 };
+    const candidate = {
+      ...(raw as Record<string, unknown>),
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+    };
     const loose = metadataDocumentSchema.safeParse(candidate);
     return loose.success ? loose.data : null;
   }
